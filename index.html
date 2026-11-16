@@ -3,14 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Leitor de Patrimônio</title>
+  <title>Leitor de Patrimônio com Ações</title>
   
-  <!-- Biblioteca JS equivalente ao mobile_scanner (lê EAN, UPC, Code128, QR, etc.) -->
+  <!-- Biblioteca de leitura de códigos -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <style>
     :root {
-      /* Paleta baseada no ColorScheme.fromSeed(seedColor: Colors.deepPurple) */
       --appbar-bg: #eaddff;
       --appbar-text: #21005d;
       --surface-bg: #fef7ff;
@@ -18,6 +17,7 @@
       --text-secondary: #49454f;
       --snackbar-bg: #322f35;
       --snackbar-text: #f5eff7;
+      --primary-color: #6750a4;
     }
 
     * {
@@ -37,7 +37,6 @@
       flex-direction: column;
     }
 
-    /* AppBar (equivalente ao AppBar do Scaffold) */
     .app-bar {
       background-color: var(--appbar-bg);
       color: var(--appbar-text);
@@ -56,7 +55,6 @@
     .app-bar h1 {
       font-size: 20px;
       font-weight: 500;
-      letter-spacing: 0.15px;
     }
 
     .icon-btn {
@@ -83,7 +81,6 @@
       fill: currentColor;
     }
 
-    /* Área da Câmera (Expanded + Stack + GestureDetector) */
     .camera-container {
       position: relative;
       flex: 1;
@@ -100,7 +97,6 @@
       border: none !important;
     }
 
-    /* Ajusta o vídeo interno da lib html5-qrcode para preencher a tela */
     #reader video {
       width: 100% !important;
       height: 100% !important;
@@ -108,13 +104,11 @@
       transform-origin: center center;
     }
 
-    /* Oculta elementos extras padrão da biblioteca */
     #reader__dashboard,
     #reader__scan_region img {
       display: none !important;
     }
 
-    /* Indicador de Zoom (Positioned top: 12, right: 12) */
     .zoom-badge {
       position: absolute;
       top: 12px;
@@ -128,17 +122,22 @@
       pointer-events: none;
     }
 
-    /* _PainelResultado com SafeArea */
     .result-panel {
       width: 100%;
       background-color: var(--surface-bg);
       color: var(--text-primary);
       padding: 16px 16px calc(16px + env(safe-area-inset-bottom)) 16px;
       display: flex;
-      align-items: center;
-      gap: 8px;
+      flex-direction: column;
+      gap: 12px;
       z-index: 20;
       flex-shrink: 0;
+    }
+
+    .result-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .result-text-group {
@@ -156,11 +155,11 @@
     }
 
     .result-value {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 400;
       color: var(--text-primary);
       word-break: break-all;
-      user-select: text; /* Equivalente ao SelectableText */
+      user-select: text;
     }
 
     .action-buttons {
@@ -174,10 +173,37 @@
       display: flex;
     }
 
-    /* SnackBar do Flutter */
+    /* Botão de ação inteligente extra (ex: Abrir Link) */
+    .smart-action-bar {
+      display: none;
+      gap: 8px;
+    }
+
+    .smart-action-bar.visible {
+      display: flex;
+    }
+
+    .btn-action {
+      flex: 1;
+      background-color: var(--primary-color);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    .btn-action:active {
+      opacity: 0.8;
+    }
+
     .snackbar {
       position: fixed;
-      bottom: calc(90px + env(safe-area-inset-bottom));
+      bottom: calc(140px + env(safe-area-inset-bottom));
       left: 16px;
       right: 16px;
       background-color: var(--snackbar-bg);
@@ -185,7 +211,7 @@
       padding: 14px 16px;
       border-radius: 4px;
       font-size: 14px;
-      box-shadow: 0 3px 5px -1px rgba(0,0,0,0.2), 0 6px 10px 0 rgba(0,0,0,0.14);
+      box-shadow: 0 3px 5px -1px rgba(0,0,0,0.2);
       opacity: 0;
       transform: translateY(20px);
       pointer-events: none;
@@ -201,91 +227,108 @@
 </head>
 <body>
 
-  <!-- AppBar -->
   <header class="app-bar">
     <h1>Leitor de Patrimônio</h1>
     <button id="torch-btn" class="icon-btn" title="Alternar lanterna" aria-label="Lanterna">
-      <!-- Ícone Icons.flash_on -->
       <svg id="torch-icon" viewBox="0 0 24 24">
         <path d="M7 2v11h3v9l7-12h-4l4-8z"/>
       </svg>
     </button>
   </header>
 
-  <!-- Área da Câmera -->
   <main class="camera-container" id="camera-area">
     <div id="reader"></div>
     <div class="zoom-badge" id="zoom-badge">Zoom 0%</div>
   </main>
 
-  <!-- _PainelResultado -->
   <footer class="result-panel">
-    <div class="result-text-group">
-      <span class="result-label" id="result-label">Aponte para um código de barras</span>
-      <span class="result-value" id="result-value">—</span>
+    <div class="result-row">
+      <div class="result-text-group">
+        <span class="result-label" id="result-label">Aponte para um código de barras</span>
+        <span class="result-value" id="result-value">—</span>
+      </div>
+
+      <div class="action-buttons" id="action-buttons">
+        <button id="copy-btn" class="icon-btn" title="Copiar" aria-label="Copiar">
+          <svg viewBox="0 0 24 24">
+            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+          </svg>
+        </button>
+        <button id="clear-btn" class="icon-btn" title="Limpar" aria-label="Limpar">
+          <svg viewBox="0 0 24 24">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
+      </div>
     </div>
 
-    <div class="action-buttons" id="action-buttons">
-      <button id="copy-btn" class="icon-btn" title="Copiar" aria-label="Copiar">
-        <!-- Ícone Icons.copy -->
-        <svg viewBox="0 0 24 24">
-          <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-        </svg>
-      </button>
-      <button id="clear-btn" class="icon-btn" title="Limpar" aria-label="Limpar">
-        <!-- Ícone Icons.close -->
-        <svg viewBox="0 0 24 24">
-          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-        </svg>
-      </button>
+    <!-- Botão dinâmico baseado no conteúdo lido -->
+    <div class="smart-action-bar" id="smart-action-bar">
+      <a id="smart-link-btn" href="#" target="_blank" class="btn-action">Abrir Link</a>
     </div>
   </footer>
 
-  <!-- SnackBar -->
   <div id="snackbar" class="snackbar">Copiado!</div>
 
   <script>
-    // Estado equivalente ao _ScannerPageState
     let html5QrCode = null;
-    let zoom = 0.0;        // 0.0 até 1.0 (igual ao Flutter)
+    let zoom = 0.0;
     let baseZoom = 0.0;
     let resultado = null;
     let formato = null;
     let torchOn = false;
-
-    // Variáveis para cálculo do gesto de pinça (GestureDetector onScaleStart/Update)
     let initialPinchDistance = 0;
 
-    // Elementos da UI
     const cameraArea = document.getElementById('camera-area');
     const zoomBadge = document.getElementById('zoom-badge');
     const resultLabel = document.getElementById('result-label');
     const resultValue = document.getElementById('result-value');
     const actionButtons = document.getElementById('action-buttons');
+    const smartActionBar = document.getElementById('smart-action-bar');
+    const smartLinkBtn = document.getElementById('smart-link-btn');
     const torchBtn = document.getElementById('torch-btn');
     const copyBtn = document.getElementById('copy-btn');
     const clearBtn = document.getElementById('clear-btn');
     const snackbar = document.getElementById('snackbar');
 
-    // Atualiza a interface (_PainelResultado)
     function renderUI() {
       if (resultado === null) {
         resultLabel.textContent = 'Aponte para um código de barras';
         resultValue.textContent = '—';
         actionButtons.classList.remove('visible');
+        smartActionBar.classList.remove('visible');
       } else {
         resultLabel.textContent = `Código lido (${formato ?? ''})`;
         resultValue.textContent = resultado;
         actionButtons.classList.add('visible');
+
+        // Verifica se o texto lido é um link válido (URL)
+        if (isValidHttpUrl(resultado)) {
+          smartLinkBtn.href = resultado;
+          smartLinkBtn.textContent = '🌐 Abrir Link';
+          smartActionBar.classList.add('visible');
+        } else {
+          // Exemplo de ação customizada para patrimônio (pesquisar em sistema interno)
+          smartLinkBtn.href = `https://www.google.com/search?q=patrimonio+${encodeURIComponent(resultado)}`;
+          smartLinkBtn.textContent = '🔍 Pesquisar Patrimônio';
+          smartActionBar.classList.add('visible');
+        }
       }
       zoomBadge.textContent = `Zoom ${Math.round(zoom * 100)}%`;
     }
 
-    // Equivalente ao _onDetect(BarcodeCapture capture)
+    function isValidHttpUrl(string) {
+      try {
+        const url = new URL(string);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch (_) {
+        return false;
+      }
+    }
+
     function onDetect(decodedText, decodedResult) {
       if (decodedText && decodedText.length > 0) {
         if (decodedText !== resultado) {
-          // HapticFeedback.vibrate()
           if (navigator.vibrate) {
             navigator.vibrate(100);
           }
@@ -296,22 +339,18 @@
       }
     }
 
-    // Equivalente ao _setZoom(double novo)
     async function setZoom(novo) {
-      const z = Math.min(Math.max(novo, 0.0), 1.0); // clamp(0.0, 1.0)
+      const z = Math.min(Math.max(novo, 0.0), 1.0);
       if (z === zoom) return;
       zoom = z;
       renderUI();
 
       const video = document.querySelector('#reader video');
       if (!video || !video.srcObject) return;
-
       const track = video.srcObject.getVideoTracks()[0];
       if (!track) return;
 
       const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-
-      // Usa zoom óptico/nativo da lente se suportado; caso contrário, fallback visual
       if (capabilities.zoom) {
         const min = capabilities.zoom.min || 1;
         const max = capabilities.zoom.max || 5;
@@ -326,46 +365,34 @@
       }
     }
 
-    // Equivalente ao _controller.toggleTorch()
     torchBtn.addEventListener('click', async () => {
       const video = document.querySelector('#reader video');
       const track = video?.srcObject?.getVideoTracks()[0];
       if (!track) return;
-
       const capabilities = track.getCapabilities ? track.getCapabilities() : {};
       if (!capabilities.torch) {
-        showSnackbar('Lanterna não suportada neste dispositivo');
+        showSnackbar('Lanterna não suportada');
         return;
       }
-
       try {
         torchOn = !torchOn;
         await track.applyConstraints({ advanced: [{ torch: torchOn }] });
         torchBtn.style.opacity = torchOn ? '1' : '0.7';
       } catch (err) {
-        console.error('Erro ao alternar lanterna:', err);
+        console.error(err);
       }
     });
 
-    // Copiar para área de transferência + SnackBar
     copyBtn.addEventListener('click', async () => {
       if (!resultado) return;
       try {
         await navigator.clipboard.writeText(resultado);
         showSnackbar('Copiado!');
       } catch {
-        // Fallback para navegadores mais antigos
-        const input = document.createElement('input');
-        input.value = resultado;
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand('copy');
-        document.body.removeChild(input);
-        showSnackbar('Copiado!');
+        showSnackbar('Erro ao copiar');
       }
     });
 
-    // Limpar resultado (onLimpar)
     clearBtn.addEventListener('click', () => {
       resultado = null;
       formato = null;
@@ -378,7 +405,6 @@
       setTimeout(() => snackbar.classList.remove('show'), 2000);
     }
 
-    // Gesto de pinça (equivalente a onScaleStart e onScaleUpdate)
     function getDistance(touches) {
       return Math.hypot(
         touches[0].clientX - touches[1].clientX,
@@ -399,7 +425,6 @@
         e.preventDefault();
         const currentDistance = getDistance(e.touches);
         const scale = currentDistance / initialPinchDistance;
-        // Mesma fórmula do código Dart: _baseZoom + (details.scale - 1) * 0.35
         setZoom(baseZoom + (scale - 1) * 0.35);
       }
     }, { passive: false });
@@ -408,25 +433,11 @@
       initialPinchDistance = 0;
     });
 
-    // Inicializa o scanner (equivalente ao MobileScannerController)
     async function initScanner() {
-      html5QrCode = new Html5Qrcode("reader", {
-        // Sem restrição de formatos = lê todos os tipos (EAN, UPC, Code128, QR etc.)
-        verbose: false
-      });
-
-      const config = {
-        fps: 15, // DetectionSpeed.normal
-        aspectRatio: window.innerHeight / window.innerWidth
-      };
-
+      html5QrCode = new Html5Qrcode("reader", { verbose: false });
+      const config = { fps: 15, aspectRatio: window.innerHeight / window.innerWidth };
       try {
-        await html5QrCode.start(
-          { facingMode: "environment" }, // CameraFacing.back
-          config,
-          onDetect,
-          () => {} // Ignora frames sem código
-        );
+        await html5QrCode.start({ facingMode: "environment" }, config, onDetect, () => {});
       } catch (err) {
         resultLabel.textContent = 'Erro ao acessar a câmera';
         resultValue.textContent = 'Verifique as permissões (HTTPS necessário)';
