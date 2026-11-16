@@ -85,7 +85,6 @@ video{width:100%;height:100%;object-fit:cover;display:block}
 .icon-btn.ok{color:var(--success)}
 .icon-btn.err{color:var(--danger)}
 
-footer.app-footer{margin-top:1.5rem;border-top:1px solid var(--border);padding-top:10px;color:var(--muted);text-align:center;font-size:.85rem}
 
 dialog{border:0;border-radius:var(--radius);background:var(--dialog-bg);color:var(--text);padding:0;max-width:min(24rem,92vw);width:100%;max-height:85vh;box-shadow:0 10px 40px rgba(0,0,0,.35)}
 dialog::backdrop{backdrop-filter:blur(4px);background:rgba(0,0,0,.35)}
@@ -139,7 +138,6 @@ legend{font-weight:500;margin-bottom:.25rem}
     </g>
   </svg>
   <h1>Leitor de Código de Barras & QR Code</h1>
-  <p>Escaneie com a câmera (de perto ou de longe) ou por imagem</p>
 </header>
 
 <div class="container" id="mainContainer">
@@ -172,11 +170,9 @@ legend{font-weight:500;margin-bottom:.25rem}
       <div class="zoom-presets" id="zoomPresets" hidden></div>
       <div class="btn-row">
         <button id="startBtn" class="btn-primary">Iniciar câmera</button>
-        <button id="hdBtn" disabled title="Tira uma foto na resolução máxima da câmera e a analisa em partes">📷 Foto HD (longe)</button>
         <button id="torchBtn" hidden>🔦 Lanterna</button>
       </div>
       <div class="status" id="status" aria-live="polite"></div>
-      <div class="hint">Para códigos distantes: use o zoom (ou deixe o zoom automático ligado nas configurações), mantenha o celular firme e boa iluminação. Se não ler, use “Foto HD”.</div>
     </div>
     <div class="results" id="cameraResults"></div>
   </section>
@@ -198,10 +194,6 @@ legend{font-weight:500;margin-bottom:.25rem}
     <div class="results" id="fileResults"></div>
   </section>
 </div>
-
-<footer class="app-footer">
-  <p>Baseado em <a href="https://github.com/georapbox/barcode-scanner" target="_blank" rel="noreferrer noopener">georapbox/barcode-scanner</a> (Licença MIT) — versão em arquivo único com leitura à distância.</p>
-</footer>
 
 <dialog id="historyDialog" class="history" aria-labelledby="hTitle">
   <div class="dhead"><h2 id="hTitle">Histórico</h2><button class="icon-btn" data-close aria-label="Fechar">✕</button></div>
@@ -343,10 +335,12 @@ const ALL_PASSES = [FULL, C60, C35, C25, ...GRID, { ...FULL, filter: CONTRAST },
 const work = document.createElement('canvas');
 const wctx = work.getContext('2d', { willReadFrequently: true });
 
-function drawPass(src, sw, sh, p) {
-  const cw = sw * p.f, ch = sh * p.f;
-  const sx = Math.min(Math.max(p.x * sw - cw / 2, 0), sw - cw);
-  const sy = Math.min(Math.max(p.y * sh - ch / 2, 0), sh - ch);
+function drawPass(src, sw, sh, p, d = 1) {
+  // região visível (centro do frame quando há zoom digital)
+  const bw = sw / d, bh = sh / d, bx = (sw - bw) / 2, by = (sh - bh) / 2;
+  const cw = bw * p.f, ch = bh * p.f;
+  const sx = bx + Math.min(Math.max(p.x * bw - cw / 2, 0), bw - cw);
+  const sy = by + Math.min(Math.max(p.y * bh - ch / 2, 0), bh - ch);
   const MAX = 2048, MIN = 900;
   const longest = Math.max(cw, ch);
   let scale = 1;
@@ -480,7 +474,7 @@ function onDetected(value, source) {
 /* ====================== Câmera ====================== */
 const video = $('#video');
 let stream = null, track = null, scanning = false, loopId = 0, passIdx = 0;
-let zoomCaps = null, zoomLevels = [], currentZoom = 1;
+let zoomCaps = null, hwCaps = null, digitalZoom = 1, zoomLevels = [], currentZoom = 1;
 let lastHit = 0, lastHitValue = '', lastZoomChange = 0, lastManualZoom = 0, autoZoomTimer = null;
 let torchOn = false;
 
@@ -515,7 +509,6 @@ async function startCamera() {
     await setupTrackControls();
     setVideoMsg('');
     $('#startBtn').textContent = 'Parar câmera';
-    $('#hdBtn').disabled = false;
     scanning = true;
     const id = ++loopId;
     scanLoop(id);
@@ -538,9 +531,9 @@ function stopCamera() {
   stream = null; track = null; torchOn = false;
   video.srcObject = null;
   $('#startBtn').textContent = 'Iniciar câmera';
-  $('#hdBtn').disabled = true;
   $('#torchBtn').hidden = true;
   $('#zoomRow').hidden = true; $('#zoomPresets').hidden = true; $('#zoomBadge').hidden = true;
+  digitalZoom = 1; currentZoom = 1; video.style.transform = '';
   setVideoMsg('Toque em “Iniciar câmera”.');
 }
 
@@ -550,20 +543,21 @@ async function setupTrackControls() {
   try {
     if (caps.focusMode?.includes('continuous')) await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
   } catch {}
-  // Zoom por hardware
-  zoomCaps = null;
-  if (caps.zoom && caps.zoom.max > caps.zoom.min) {
-    zoomCaps = caps.zoom;
-    const slider = $('#zoomSlider');
-    slider.min = zoomCaps.min; slider.max = zoomCaps.max; slider.step = zoomCaps.step || 0.1;
-    currentZoom = track.getSettings?.().zoom ?? zoomCaps.min;
-    slider.value = currentZoom;
-    const cand = [1, 1.5, 2, 3, 4, 5, 6, 8, 10].filter(z => z >= zoomCaps.min && z <= zoomCaps.max);
-    zoomLevels = [...new Set([zoomCaps.min, ...cand])].sort((a, b) => a - b);
-    buildPresets();
-    $('#zoomRow').hidden = false; $('#zoomPresets').hidden = false;
-    updateZoomUI();
-  }
+  // Zoom: hardware quando existir; o que passar disso (ou tudo, se não houver) é zoom digital.
+  hwCaps = (caps.zoom && caps.zoom.max > caps.zoom.min) ? caps.zoom : null;
+  digitalZoom = 1; video.style.transform = '';
+  const tMin = hwCaps ? hwCaps.min : 1;
+  const tMax = hwCaps ? Math.min(hwCaps.max * 3, 12) : 8;
+  zoomCaps = { min: tMin, max: tMax, step: 0.1 };
+  const slider = $('#zoomSlider');
+  slider.min = tMin; slider.max = tMax; slider.step = 0.1;
+  currentZoom = hwCaps ? (track.getSettings?.().zoom ?? tMin) : 1;
+  slider.value = currentZoom;
+  const cand = [1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12].filter(z => z >= tMin && z <= tMax);
+  zoomLevels = [...new Set([tMin, ...cand])].sort((a, b) => a - b);
+  buildPresets();
+  $('#zoomRow').hidden = false; $('#zoomPresets').hidden = false;
+  updateZoomUI();
   if (caps.torch) $('#torchBtn').hidden = false;
 }
 function buildPresets() {
@@ -578,7 +572,7 @@ function buildPresets() {
 }
 function updateZoomUI() {
   const badge = $('#zoomBadge');
-  badge.hidden = !zoomCaps;
+  badge.hidden = !zoomCaps || !stream;
   badge.textContent = (Math.round(currentZoom * 10) / 10) + '×';
   $('#zoomSlider').value = currentZoom;
   $('#zoomPresets').querySelectorAll('button').forEach(b => b.classList.toggle('active', Math.abs(+b.dataset.z - currentZoom) < 0.05));
@@ -586,11 +580,16 @@ function updateZoomUI() {
 async function setZoom(z) {
   if (!track || !zoomCaps) return;
   z = Math.min(zoomCaps.max, Math.max(zoomCaps.min, z));
-  try {
-    await track.applyConstraints({ advanced: [{ zoom: z }] });
-    currentZoom = z; lastZoomChange = Date.now();
-    updateZoomUI();
-  } catch (e) { console.warn('zoom', e); }
+  const hwZ = hwCaps ? Math.min(hwCaps.max, Math.max(hwCaps.min, z)) : 1;
+  const d = Math.max(1, z / hwZ);
+  digitalZoom = d;
+  video.style.transform = d > 1.001 ? `scale(${d})` : '';
+  currentZoom = z; lastZoomChange = Date.now();
+  updateZoomUI();
+  if (hwCaps) {
+    try { await track.applyConstraints({ advanced: [{ zoom: hwZ }] }); }
+    catch (e) { console.warn('zoom', e); }
+  }
 }
 $('#zoomSlider').addEventListener('input', e => { lastManualZoom = Date.now(); setZoom(+e.target.value); });
 
@@ -644,7 +643,7 @@ async function scanLoop(id) {
     if (video.readyState >= 2 && video.videoWidth && !document.hidden) {
       try {
         const p = LIVE_PASSES[passIdx++ % LIVE_PASSES.length];
-        drawPass(video, video.videoWidth, video.videoHeight, p);
+        drawPass(video, video.videoWidth, video.videoHeight, p, digitalZoom);
         const res = await detector.detect(work);
         if (res.length && res[0].rawValue) handleLiveHit(res[0].rawValue);
       } catch (e) { console.warn(e); }
@@ -661,36 +660,6 @@ function handleLiveHit(value) {
   onDetected(value, 'camera');
 }
 let lastHitTime = 0;
-
-// Foto em resolução máxima + varredura em blocos
-$('#hdBtn').addEventListener('click', async () => {
-  if (!track || $('#hdBtn').disabled) return;
-  const btn = $('#hdBtn');
-  btn.disabled = true;
-  setStatus('Capturando foto em alta resolução…');
-  let bitmap = null;
-  try {
-    if ('ImageCapture' in window) {
-      const ic = new ImageCapture(track);
-      let opts;
-      try {
-        const pc = await ic.getPhotoCapabilities();
-        if (pc.imageWidth?.max) opts = { imageWidth: pc.imageWidth.max, imageHeight: pc.imageHeight?.max };
-      } catch {}
-      const blob = await ic.takePhoto(opts);
-      bitmap = await createImageBitmap(blob);
-    }
-  } catch (e) { console.warn('takePhoto falhou', e); }
-  if (!bitmap) { try { bitmap = await createImageBitmap(video); } catch {} }
-  if (!bitmap) { setStatus('Não foi possível capturar a imagem.', 'error'); btn.disabled = false; return; }
-
-  const val = await scanSource(bitmap, bitmap.width, bitmap.height, ALL_PASSES,
-    (i, n) => setStatus(`Analisando foto ${bitmap.width}×${bitmap.height} — etapa ${i}/${n}…`));
-  bitmap.close?.();
-  if (val) { lastHit = Date.now(); lastHitValue = val; lastHitTime = Date.now(); setStatus('Código lido!'); onDetected(val, 'camera'); }
-  else { setStatus('Nenhum código encontrado na foto. Aproxime/dê zoom e tente de novo.', 'error'); triggerEffects(false); }
-  btn.disabled = !track;
-});
 
 $('#startBtn').addEventListener('click', () => { stream ? stopCamera() : startCamera(); });
 
