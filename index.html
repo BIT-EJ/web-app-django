@@ -8,48 +8,67 @@
   :root { color-scheme: light dark; --bg:#f5f6f8; --card:#fff; --fg:#14171c; --muted:#6b7280; --accent:#2563eb; --ok:#15803d; --okbg:#dcfce7; --err:#b91c1c; --errbg:#fee2e2; --bd:#e5e7eb; }
   @media (prefers-color-scheme: dark) { :root { --bg:#0f1216; --card:#1a1f27; --fg:#eef1f5; --muted:#9aa3b0; --accent:#60a5fa; --ok:#86efac; --okbg:#14301f; --err:#fca5a5; --errbg:#3b1616; --bd:#2b323d; } }
   * { box-sizing: border-box; }
+  [hidden] { display:none !important; }
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--fg); min-height:100vh; display:flex; justify-content:center; padding:20px; }
   main { width:100%; max-width:480px; display:flex; flex-direction:column; gap:16px; }
   h1 { font-size:1.3rem; margin:8px 0 0; }
   p.sub { margin:0; color:var(--muted); font-size:.95rem; }
-  .btn { display:block; text-align:center; background:var(--accent); color:#fff; font-weight:600; font-size:1.1rem; padding:18px; border-radius:14px; cursor:pointer; border:0; width:100%; }
-  .btn.sec { background:transparent; color:var(--accent); border:1.5px solid var(--accent); font-size:1rem; padding:12px; }
+  .btn { display:block; text-align:center; background:var(--accent); color:#fff; font-weight:600; font-size:1.1rem; padding:16px; border-radius:14px; cursor:pointer; border:0; width:100%; }
+  .btn:disabled { opacity:.6; cursor:default; }
+  .btn.sec { background:transparent; color:var(--accent); border:1.5px solid var(--accent); font-size:.95rem; padding:10px; }
   input[type=file] { display:none; }
-  .card { background:var(--card); border:1px solid var(--bd); border-radius:14px; padding:16px; }
-  #preview { width:100%; border-radius:10px; display:none; max-height:50vh; object-fit:contain; background:#000; }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:12px; }
+  #view { width:100%; display:block; border-radius:10px; background:#fff; touch-action:none; cursor:grab; }
+  .hint { font-size:.8rem; color:var(--muted); text-align:center; margin-top:-4px; }
+  .row { display:flex; gap:8px; }
+  .row .btn { flex:1; }
+  label.rng { display:flex; flex-direction:column; gap:4px; font-size:.9rem; }
+  label.rng span.t { display:flex; justify-content:space-between; }
+  label.rng b { font-variant-numeric: tabular-nums; }
+  input[type=range] { width:100%; accent-color:var(--accent); height:28px; }
   #status { font-size:.95rem; color:var(--muted); }
-  .res { border-radius:14px; padding:16px; display:none; word-break:break-all; }
+  .res { border-radius:14px; padding:16px; }
   .res.ok { background:var(--okbg); color:var(--ok); }
   .res.fail { background:var(--errbg); color:var(--err); }
   .res .lbl { font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; opacity:.85; }
-  .res .val { font-size:1.5rem; font-weight:700; margin:4px 0 10px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .res .val { font-size:1.5rem; font-weight:700; margin:4px 0 10px; font-family: ui-monospace, Menlo, Consolas, monospace; word-break:break-all; }
   .res .fmt { font-size:.9rem; margin-bottom:10px; }
-  .res button { margin-top:4px; }
 </style>
 </head>
 <body>
 <main>
   <h1>Leitor de código de barras</h1>
-  <p class="sub">Toque no botão, tire a foto com a câmera do celular e a leitura aparece automaticamente.</p>
+  <p class="sub">Tire a foto, ajuste o enquadramento (girar e dar zoom) até o código ficar reto e grande, e toque em Ler código.</p>
 
   <label class="btn" for="cam">📷 Tirar foto</label>
   <input id="cam" type="file" accept="image/*" capture="environment">
 
-  <div class="card">
-    <img id="preview" alt="Foto tirada">
+  <div class="card" id="editor" hidden>
+    <canvas id="view"></canvas>
+    <div class="hint">Arraste para mover · pinça ou scroll para zoom · alinhe as barras com as linhas-guia</div>
+    <div class="row">
+      <button class="btn sec" id="rotL" type="button">↺ 90°</button>
+      <button class="btn sec" id="rotR" type="button">↻ 90°</button>
+      <button class="btn sec" id="reset" type="button">Reiniciar</button>
+    </div>
+    <label class="rng"><span class="t">Inclinação <b id="fineLbl">0°</b></span>
+      <input id="fine" type="range" min="-45" max="45" step="0.5" value="0"></label>
+    <label class="rng"><span class="t">Zoom <b id="zoomLbl">100%</b></span>
+      <input id="zoom" type="range" min="-1.6" max="2.48" step="0.01" value="0"></label>
+    <button class="btn" id="read" type="button">🔍 Ler código</button>
     <div id="status">Aguardando foto…</div>
   </div>
 
-  <div id="ok" class="res ok">
+  <div id="ok" class="res ok" hidden>
     <div class="lbl">Leitura</div>
     <div class="val" id="val"></div>
     <div class="fmt" id="fmt"></div>
     <button class="btn sec" id="copy" type="button">Copiar</button>
   </div>
 
-  <div id="fail" class="res fail">
+  <div id="fail" class="res fail" hidden>
     <strong>Falha ao ler o código de barras.</strong><br>
-    <span style="font-size:.9rem">Tente de novo: chegue mais perto, deixe o código nítido, bem iluminado e sem reflexo, ocupando boa parte da foto.</span>
+    <span style="font-size:.9rem">Ajuste a inclinação e o zoom para o código ficar reto, nítido e ocupando boa parte do quadro, depois toque em Ler código de novo. Se persistir, tire outra foto com mais luz e sem reflexo.</span>
   </div>
 </main>
 
@@ -57,10 +76,118 @@
 <script>
 (function () {
   const $ = id => document.getElementById(id);
-  const input = $('cam'), preview = $('preview'), statusEl = $('status');
-  const okBox = $('ok'), failBox = $('fail');
+  const input = $('cam'), view = $('view'), statusEl = $('status'), readBtn = $('read');
+  const editor = $('editor'), okBox = $('ok'), failBox = $('fail');
   const tick = () => new Promise(r => setTimeout(r, 0));
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const ASPECT = 0.75; // altura = 75% da largura
 
+  /* ---------- Editor: girar, mover e dar zoom ---------- */
+  const S = { img: null, url: null, rot90: 0, fine: 0, zoom: 1, px: 0, py: 0, fit: 1 };
+  const total = () => S.rot90 * 90 + S.fine;
+  const VW = () => view.clientWidth, VH = () => VW() * ASPECT;
+
+  function render(ctx, w, h, k) {
+    ctx.save();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w * k, h * k);
+    ctx.translate(w * k / 2 + S.px * k, h * k / 2 + S.py * k);
+    ctx.rotate(total() * Math.PI / 180);
+    const sc = S.fit * S.zoom * k;
+    ctx.scale(sc, sc);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(S.img, -S.img.naturalWidth / 2, -S.img.naturalHeight / 2);
+    ctx.restore();
+  }
+
+  function draw() {
+    if (!S.img) return;
+    const w = VW(), h = Math.round(VH()), dpr = window.devicePixelRatio || 1;
+    if (view.width !== Math.round(w * dpr) || view.height !== Math.round(h * dpr)) {
+      view.width = Math.round(w * dpr); view.height = Math.round(h * dpr);
+      view.style.height = h + 'px';
+    }
+    const ctx = view.getContext('2d');
+    render(ctx, w, h, dpr);
+    // linhas-guia
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.strokeStyle = 'rgba(220,38,38,.55)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 1; i < 4; i++) { ctx.moveTo(w * i / 4, 0); ctx.lineTo(w * i / 4, h); }
+    for (let i = 1; i < 4; i++) { ctx.moveTo(0, h * i / 4); ctx.lineTo(w, h * i / 4); }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function syncUI() {
+    $('fine').value = S.fine; $('fineLbl').textContent = S.fine.toFixed(1).replace('.0', '') + '°';
+    $('zoom').value = Math.log(S.zoom); $('zoomLbl').textContent = Math.round(S.zoom * 100) + '%';
+  }
+
+  function refit() {
+    const w = VW(), h = VH(), a = total() * Math.PI / 180;
+    const iw = S.img.naturalWidth, ih = S.img.naturalHeight;
+    const bw = Math.abs(iw * Math.cos(a)) + Math.abs(ih * Math.sin(a));
+    const bh = Math.abs(iw * Math.sin(a)) + Math.abs(ih * Math.cos(a));
+    S.fit = Math.min(w / bw, h / bh);
+    S.zoom = 1; S.px = 0; S.py = 0;
+    syncUI(); draw();
+  }
+
+  function rotatePan(deg) {
+    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    const nx = S.px * c - S.py * s, ny = S.px * s + S.py * c;
+    S.px = nx; S.py = ny;
+  }
+
+  function zoomAt(f, mx, my) {
+    const nz = clamp(S.zoom * f, 0.2, 12); f = nz / S.zoom;
+    S.px = mx - (mx - S.px) * f; S.py = my - (my - S.py) * f; S.zoom = nz;
+  }
+
+  $('rotL').onclick = () => { S.rot90 = (S.rot90 + 3) % 4; refit(); };
+  $('rotR').onclick = () => { S.rot90 = (S.rot90 + 1) % 4; refit(); };
+  $('reset').onclick = () => { S.rot90 = 0; S.fine = 0; refit(); };
+  $('fine').oninput = e => {
+    const v = parseFloat(e.target.value); rotatePan(v - S.fine); S.fine = v; syncUI(); draw();
+  };
+  $('zoom').oninput = e => {
+    zoomAt(Math.exp(parseFloat(e.target.value)) / S.zoom, 0, 0); syncUI(); draw();
+  };
+
+  const ptrs = new Map();
+  view.addEventListener('pointerdown', e => {
+    view.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  });
+  view.addEventListener('pointermove', e => {
+    const prev = ptrs.get(e.pointerId); if (!prev) return;
+    const cur = { x: e.clientX, y: e.clientY };
+    if (ptrs.size === 1) {
+      S.px += cur.x - prev.x; S.py += cur.y - prev.y;
+    } else if (ptrs.size === 2) {
+      const other = [...ptrs.entries()].find(([id]) => id !== e.pointerId)[1];
+      const r = view.getBoundingClientRect();
+      const mx = (cur.x + other.x) / 2 - r.left - r.width / 2, my = (cur.y + other.y) / 2 - r.top - r.height / 2;
+      const pmx = (prev.x + other.x) / 2 - r.left - r.width / 2, pmy = (prev.y + other.y) / 2 - r.top - r.height / 2;
+      S.px += mx - pmx; S.py += my - pmy;
+      const d0 = Math.hypot(prev.x - other.x, prev.y - other.y), d1 = Math.hypot(cur.x - other.x, cur.y - other.y);
+      if (d0 > 0) zoomAt(d1 / d0, mx, my);
+    }
+    ptrs.set(e.pointerId, cur); syncUI(); draw();
+  });
+  const endPtr = e => ptrs.delete(e.pointerId);
+  view.addEventListener('pointerup', endPtr);
+  view.addEventListener('pointercancel', endPtr);
+  view.addEventListener('wheel', e => {
+    e.preventDefault();
+    const r = view.getBoundingClientRect();
+    zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2);
+    syncUI(); draw();
+  }, { passive: false });
+  window.addEventListener('resize', () => { if (S.img) refit(); });
+
+  /* ---------- Detectores ---------- */
   const NATIVE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','codabar','qr_code','data_matrix','pdf417','aztec'];
   let nativeDetector = null;
   async function getNative() {
@@ -76,7 +203,6 @@
     return nativeDetector;
   }
 
-  // ZXing setup
   let zxReader = null;
   function getZX() {
     if (zxReader !== null) return zxReader;
@@ -104,24 +230,24 @@
       try {
         const r = reader.decode(new Z.BinaryBitmap(new Bin(lum)));
         return { text: r.getText(), format: Z.BarcodeFormat[r.getBarcodeFormat()] };
-      } catch (e) { /* não encontrou nessa variante */ }
+      } catch (e) { /* não achou nessa variante */ }
     }
     return null;
   }
 
-  // Monta uma variante da imagem: escala, recorte, rotação, filtro
-  function makeCanvas(img, maxSide, crop, rot, filter) {
-    const sw = img.naturalWidth, sh = img.naturalHeight;
+  // Variante: escala, recorte central, rotação extra de 90° e filtro
+  function makeCanvas(src, maxSide, crop, rot, filter) {
+    const sw = src.width, sh = src.height;
     const cw = Math.round(sw * crop), ch = Math.round(sh * crop);
     const cx = Math.round((sw - cw) / 2), cy = Math.round((sh - ch) / 2);
     const k = Math.min(1, maxSide / Math.max(cw, ch));
-    let w = Math.max(1, Math.round(cw * k)), h = Math.max(1, Math.round(ch * k));
+    const w = Math.max(1, Math.round(cw * k)), h = Math.max(1, Math.round(ch * k));
     const c = document.createElement('canvas');
     const ctx = c.getContext('2d', { willReadFrequently: true });
     if (rot === 90) { c.width = h; c.height = w; ctx.translate(h, 0); ctx.rotate(Math.PI / 2); }
     else { c.width = w; c.height = h; }
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, cx, cy, cw, ch, 0, 0, w, h);
+    ctx.drawImage(src, cx, cy, cw, ch, 0, 0, w, h);
     if (filter !== 'none') applyFilter(c, filter);
     return c;
   }
@@ -137,7 +263,7 @@
       acc = 0;
       for (let i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= n * 0.02) { hi = i; break; } }
       const span = Math.max(1, hi - lo);
-      for (let i = 0; i < n; i++) { const v = Math.max(0, Math.min(255, ((g[i] - lo) * 255 / span) | 0)); d[i*4] = d[i*4+1] = d[i*4+2] = v; }
+      for (let i = 0; i < n; i++) { const v = clamp(((g[i] - lo) * 255 / span) | 0, 0, 255); d[i*4] = d[i*4+1] = d[i*4+2] = v; }
     } else { // otsu
       let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
       let wB = 0, sB = 0, best = 0, th = 128;
@@ -153,19 +279,19 @@
     ctx.putImageData(id, 0, 0);
   }
 
-  async function decodeImage(img) {
+  async function decodeSource(src) {
     const native = await getNative();
     const scales = [1600, 1000, 2400, 700];
     const filters = ['none', 'contrast', 'otsu'];
     const crops = [1, 0.7];
     const rots = [0, 90];
-    const total = scales.length * filters.length * crops.length * rots.length;
+    const totalTries = scales.length * filters.length * crops.length * rots.length;
     let i = 0;
     for (const s of scales) for (const f of filters) for (const cr of crops) for (const rot of rots) {
       i++;
-      statusEl.textContent = 'Lendo… tentativa ' + i + ' de ' + total;
+      statusEl.textContent = 'Lendo… tentativa ' + i + ' de ' + totalTries;
       await tick();
-      const c = makeCanvas(img, s, cr, rot, f);
+      const c = makeCanvas(src, s, cr, rot, f);
       if (native) {
         try {
           const res = await native.detect(c);
@@ -178,39 +304,68 @@
     return null;
   }
 
+  // Renderiza o quadro ajustado pelo usuário em alta resolução
+  function renderOutput() {
+    const w = VW(), h = VH();
+    const k = Math.min(2800 / w, Math.max(1 / (S.fit * S.zoom), 600 / w));
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * k); c.height = Math.round(h * k);
+    render(c.getContext('2d', { willReadFrequently: true }), w, h, c.width / w);
+    return c;
+  }
+
+  /* ---------- Fluxo ---------- */
   input.addEventListener('change', async () => {
     const file = input.files && input.files[0];
     if (!file) return;
-    okBox.style.display = failBox.style.display = 'none';
-    const url = URL.createObjectURL(file);
-    preview.src = url; preview.style.display = 'block';
+    okBox.hidden = failBox.hidden = true;
+    if (S.url) URL.revokeObjectURL(S.url);
+    S.url = URL.createObjectURL(file);
     statusEl.textContent = 'Carregando foto…';
+    editor.hidden = false;
     try {
       const img = new Image();
-      img.src = url;
+      img.src = S.url;
       await img.decode();
+      S.img = img; S.rot90 = 0; S.fine = 0;
+      refit();
+      statusEl.textContent = 'Ajuste o quadro e toque em Ler código.';
+    } catch (e) {
+      statusEl.textContent = 'Erro ao abrir a foto.';
+    } finally {
+      input.value = '';
+    }
+  });
+
+  readBtn.addEventListener('click', async () => {
+    if (!S.img) return;
+    okBox.hidden = failBox.hidden = true;
+    readBtn.disabled = true;
+    try {
       if (!getZX() && !(await getNative())) {
         statusEl.textContent = 'Erro: não foi possível carregar o leitor (verifique a internet).';
-        failBox.style.display = 'block';
+        failBox.hidden = false;
         return;
       }
       const t0 = performance.now();
-      const r = await decodeImage(img);
+      const r = await decodeSource(renderOutput());
       const secs = ((performance.now() - t0) / 1000).toFixed(1);
       if (r) {
         $('val').textContent = r.text;
         $('fmt').textContent = 'Formato: ' + r.format.replace(/_/g, '-') + ' · ' + r.engine + ' · ' + secs + 's';
-        okBox.style.display = 'block';
+        okBox.hidden = false;
         statusEl.textContent = 'Leitura concluída.';
+        okBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } else {
-        failBox.style.display = 'block';
+        failBox.hidden = false;
         statusEl.textContent = 'Não foi possível ler (' + secs + 's).';
+        failBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     } catch (e) {
-      statusEl.textContent = 'Erro ao processar a foto.';
-      failBox.style.display = 'block';
+      statusEl.textContent = 'Erro ao processar a imagem.';
+      failBox.hidden = false;
     } finally {
-      input.value = ''; // permite tirar outra foto igual
+      readBtn.disabled = false;
     }
   });
 
