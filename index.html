@@ -1,83 +1,364 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Inventário Patrimonial</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            background-color: #f4f4f9;
-            color: #333;
-        }
-        header {
-            background-color: #007bff;
-            color: white;
-            padding: 15px;
-            border-radius: 5px;
-        }
-        main {
-            margin-top: 20px;
-        }
-        button {
-            padding: 10px 15px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #218838;
-        }
-        button:disabled {
-            background-color: #6c757d;
-            cursor: not-allowed;
-        }
-        #resultado {
-            margin-top: 15px;
-            font-weight: bold;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leitor de Código de Barras</title>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #101114;
+      color: white;
+      font-family: Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+
+    .scanner {
+      width: 100%;
+      max-width: 600px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 16px;
+      background: #000;
+      border: 2px solid #333;
+    }
+
+    video {
+      width: 100%;
+      display: block;
+      object-fit: cover;
+    }
+
+    .scan-line {
+      position: absolute;
+      left: 5%;
+      right: 5%;
+      top: 50%;
+      height: 2px;
+      background: #00ff88;
+      box-shadow: 0 0 12px #00ff88;
+      pointer-events: none;
+    }
+
+    .result {
+      margin-top: 25px;
+      width: 100%;
+      max-width: 600px;
+      min-height: 110px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 20px;
+      background: #202228;
+      border-radius: 12px;
+      border: 1px solid #383b44;
+    }
+
+    .result-label {
+      font-size: 13px;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #barcode {
+      font-size: clamp(22px, 6vw, 36px);
+      font-weight: bold;
+      overflow-wrap: anywhere;
+      color: #00ff88;
+    }
+
+    #status {
+      margin-top: 15px;
+      color: #aaa;
+      font-size: 14px;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    button {
+      padding: 13px 22px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #00cc77;
+      color: #07140e;
+    }
+
+    button:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+
+    #stop {
+      background: #353943;
+      color: white;
+    }
+
+    .hint {
+      margin-top: 20px;
+      max-width: 450px;
+      color: #888;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+  </style>
 </head>
+
 <body>
 
-    <header>
-        <h1>Sistema de Inventário Patrimonial</h1>
-    </header>
+  <h1>Leitor de Código de Barras</h1>
 
-    <main>
-        <p>teste</p>
-        <button id="btnProcessar" onclick="chamarBackend()">Clique aqui</button>
-        <p id="resultado"></p>
-    </main>
+  <div class="scanner">
+    <video id="camera" autoplay muted playsinline></video>
+    <div class="scan-line"></div>
+  </div>
 
-    <script>
-        async function chamarBackend() {
-            const botao = document.getElementById('btnProcessar');
-            const resultado = document.getElementById('resultado');
+  <div class="result">
+    <span class="result-label">Código identificado</span>
+    <span id="barcode">Aguardando leitura...</span>
+  </div>
 
-            botao.disabled = true;
-            resultado.innerText = 'Processando...';
+  <p id="status">Câmera desligada</p>
 
-            try {
-                const response = await fetch('/api/processar');
-                
-                if (!response.ok) {
-                    throw new Error(`Erro HTTP: ${response.status}`);
-                }
+  <div class="buttons">
+    <button id="start">Iniciar câmera</button>
+    <button id="stop" disabled>Parar câmera</button>
+    <button id="clear">Limpar</button>
+  </div>
 
-                const dados = await response.json();
-                resultado.innerText = dados.mensagem;
-            } catch (erro) {
-                console.error('Erro na requisição:', erro);
-                resultado.innerText = 'Erro ao conectar com o backend Python.';
-            } finally {
-                botao.disabled = false;
+  <p class="hint">
+    Posicione o código na frente da câmera.
+    Mantenha o código visível e bem iluminado.
+    O leitor identificará automaticamente.
+  </p>
+
+  <script type="module">
+
+    import {
+      BrowserMultiFormatReader,
+      BarcodeFormat,
+      DecodeHintType
+    } from 'https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm';
+
+    const video = document.getElementById('camera');
+    const barcode = document.getElementById('barcode');
+    const status = document.getElementById('status');
+
+    const startButton = document.getElementById('start');
+    const stopButton = document.getElementById('stop');
+    const clearButton = document.getElementById('clear');
+
+    // Formatos de código de barras aceitos.
+    const hints = new Map();
+
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.ITF,
+      BarcodeFormat.CODABAR
+    ]);
+
+    // Prioriza os formatos definidos e evita tentativas desnecessárias.
+    const reader = new BrowserMultiFormatReader(hints);
+
+    // Intervalo entre tentativas de decodificação.
+    reader.timeBetweenDecodingAttempts = 100;
+
+    let controls = null;
+    let lastCode = '';
+    let lastReadTime = 0;
+
+    // Iniciar câmera.
+    async function startCamera() {
+
+      try {
+
+        startButton.disabled = true;
+        status.textContent = 'Inicializando câmera...';
+
+        barcode.textContent = 'Aguardando leitura...';
+
+        lastCode = '';
+
+        controls = await reader.decodeFromConstraints(
+
+          {
+            audio: false,
+
+            video: {
+              facingMode: { ideal: 'environment' },
+
+              width: {
+                ideal: 1920
+              },
+
+              height: {
+                ideal: 1080
+              },
+
+              frameRate: {
+                ideal: 30,
+                max: 30
+              },
+
+              focusMode: 'continuous'
             }
+
+          },
+
+          video,
+
+          (result, error) => {
+
+            if (result) {
+
+              const code = result.getText();
+              const now = Date.now();
+
+              // Evita processar repetidamente o mesmo código.
+              if (
+                code === lastCode &&
+                now - lastReadTime < 2000
+              ) {
+                return;
+              }
+
+              lastCode = code;
+              lastReadTime = now;
+
+              // Exibe o resultado no centro da tela.
+              barcode.textContent = code;
+
+              status.textContent =
+                'Código detectado com sucesso!';
+
+              // Feedback sonoro.
+              if ('vibrate' in navigator) {
+                navigator.vibrate(100);
+              }
+
+            }
+
+          }
+
+        );
+
+        // Tenta aplicar foco contínuo após iniciar a câmera.
+        const track = video.srcObject?.getVideoTracks()[0];
+
+        if (track) {
+
+          try {
+
+            await track.applyConstraints({
+              advanced: [
+                { focusMode: 'continuous' }
+              ]
+            });
+
+          } catch (error) {
+            console.log('Foco contínuo não disponível.');
+          }
+
         }
-    </script>
+
+        status.textContent = 'Procurando códigos de barras...';
+
+        stopButton.disabled = false;
+
+      } catch (error) {
+
+        console.error(error);
+
+        status.textContent =
+          'Erro ao acessar a câmera: ' + error.message;
+
+        startButton.disabled = false;
+
+      }
+
+    }
+
+    // Parar câmera.
+    function stopCamera() {
+
+      if (controls) {
+        controls.stop();
+        controls = null;
+      }
+
+      if (video.srcObject) {
+
+        video.srcObject.getTracks().forEach(track => {
+          track.stop();
+        });
+
+        video.srcObject = null;
+      }
+
+      startButton.disabled = false;
+      stopButton.disabled = true;
+
+      status.textContent = 'Câmera desligada';
+
+    }
+
+    // Limpar resultado.
+    function clearResult() {
+
+      barcode.textContent = 'Aguardando leitura...';
+      lastCode = '';
+      lastReadTime = 0;
+
+      status.textContent = controls
+        ? 'Procurando códigos de barras...'
+        : 'Câmera desligada';
+
+    }
+
+    startButton.addEventListener('click', startCamera);
+
+    stopButton.addEventListener('click', stopCamera);
+
+    clearButton.addEventListener('click', clearResult);
+
+    // Encerra a câmera ao sair da página.
+    window.addEventListener('pagehide', stopCamera);
+
+  </script>
 
 </body>
 </html>
