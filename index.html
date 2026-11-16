@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Leitor de Código</title>
 
   <style>
@@ -12,38 +12,24 @@
       box-sizing: border-box;
     }
 
-    body {
-      background: #101114;
-      color: white;
-      font-family: Arial, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      text-align: center;
-    }
-
-    h1 {
-      font-size: 24px;
-      margin-bottom: 20px;
-    }
-
-    .scanner-box {
+    html, body {
       width: 100%;
-      max-width: 500px;
-      height: 360px;
-      background: #000;
-      border: 2px solid #333;
-      border-radius: 16px;
+      height: 100%;
       overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+
+    /* Câmera ocupando 100% da tela */
+    .camera-fullscreen {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100dvh;
+      background: #000;
       touch-action: none;
       user-select: none;
+      overflow: hidden;
     }
 
     video, canvas#overlay {
@@ -57,86 +43,92 @@
 
     canvas#overlay {
       pointer-events: none;
-    }
-
-    .placeholder-text {
-      color: #666;
-      font-size: 14px;
-      z-index: 1;
-      pointer-events: none;
-    }
-
-    #zoom-badge {
-      position: absolute;
-      bottom: 12px;
-      right: 12px;
-      background: rgba(0, 0, 0, 0.65);
-      color: #00ff88;
-      border: 1px solid rgba(0, 255, 136, 0.4);
-      padding: 5px 10px;
-      border-radius: 20px;
-      font-size: 13px;
-      font-weight: bold;
       z-index: 2;
+    }
+
+    /* Indicador de Zoom em porcentagem (0% a 100%) */
+    #zoom-badge {
+      position: fixed;
+      top: max(18px, env(safe-area-inset-top));
+      right: 18px;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(6px);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 10;
       pointer-events: none;
       display: none;
     }
 
-    .result {
-      margin-top: 20px;
-      width: 100%;
-      max-width: 500px;
-      padding: 20px;
-      background: #202228;
-      border-radius: 12px;
-      border: 1px solid #383b44;
+    /* Barra branca na parte inferior */
+    .bottom-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #ffffff;
+      color: #111111;
+      padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+      box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.28);
+      z-index: 20;
       display: flex;
-      flex-direction: column;
-      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
     }
 
-    .result-label {
-      font-size: 12px;
-      color: #aaa;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-
-    #barcode {
-      font-size: clamp(22px, 6vw, 34px);
-      font-weight: bold;
-      color: #00ff88;
-      overflow-wrap: anywhere;
+    .result-info {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
     }
 
     #status {
-      margin-top: 12px;
-      color: #aaa;
-      font-size: 14px;
+      font-size: 12px;
+      color: #666666;
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #barcode {
+      font-size: 19px;
+      font-weight: 700;
+      color: #111111;
+      overflow-wrap: anywhere;
+      line-height: 1.2;
+    }
+
+    #barcode.detected {
+      color: #008a4b;
     }
 
     #action-btn {
-      margin-top: 20px;
-      width: 100%;
-      max-width: 500px;
-      padding: 15px;
+      flex-shrink: 0;
+      padding: 12px 18px;
       border: none;
-      border-radius: 10px;
-      font-size: 16px;
-      font-weight: bold;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
       cursor: pointer;
-      background: #00cc77;
-      color: #07140e;
-      transition: background 0.2s, transform 0.1s;
+      background: #111111;
+      color: #ffffff;
+      transition: opacity 0.2s, transform 0.1s;
     }
 
     #action-btn:active {
-      transform: scale(0.98);
+      transform: scale(0.96);
     }
 
     #action-btn.stop-mode {
-      background: #ff4757;
-      color: white;
+      background: #e63946;
+      color: #ffffff;
     }
 
     #action-btn:disabled {
@@ -148,23 +140,19 @@
 
 <body>
 
-  <h1>Leitor de Código</h1>
-
-  <div class="scanner-box" id="scanner-box">
-    <span class="placeholder-text" id="placeholder">Câmera desligada</span>
+  <div class="camera-fullscreen" id="scanner-box">
     <video id="camera" autoplay muted playsinline></video>
     <canvas id="overlay"></canvas>
-    <span id="zoom-badge">1.0x</span>
+    <span id="zoom-badge">0%</span>
   </div>
 
-  <div class="result">
-    <span class="result-label">Código identificado</span>
-    <span id="barcode">---</span>
+  <div class="bottom-bar">
+    <div class="result-info">
+      <div id="status">Câmera desligada</div>
+      <div id="barcode">Aguardando leitura...</div>
+    </div>
+    <button id="action-btn">Iniciar</button>
   </div>
-
-  <p id="status">Clique no botão abaixo para ler</p>
-
-  <button id="action-btn">Iniciar Câmera</button>
 
   <script type="module">
     import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es/pure.min.js';
@@ -177,9 +165,8 @@
     const actionBtn = document.getElementById('action-btn');
     const barcodeEl = document.getElementById('barcode');
     const statusEl = document.getElementById('status');
-    const placeholderEl = document.getElementById('placeholder');
 
-    // Canvas oculto para analisar recortes ampliados (detecção de longa distância)
+    // Canvas auxiliar para leitura em longa distância (multi-escala)
     const cropCanvas = document.createElement('canvas');
     const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -203,10 +190,10 @@
     let scanTimer = null;
     let frameStep = 0;
 
-    // Controle de Zoom (Pinça)
+    // Controle de Zoom em Porcentagem (0% a 100%)
     let supportsHardwareZoom = false;
     let minZoom = 1;
-    let maxZoom = 6;
+    let maxZoom = 5;
     let currentZoom = 1;
     let initialPinchDistance = 0;
     let initialZoomAtPinch = 1;
@@ -218,9 +205,18 @@
       return Math.hypot(dx, dy);
     }
 
+    function updateZoomPercentageBadge() {
+      if (maxZoom <= minZoom) {
+        zoomBadge.textContent = '0%';
+        return;
+      }
+      const percent = Math.round(((currentZoom - minZoom) / (maxZoom - minZoom)) * 100);
+      zoomBadge.textContent = `${Math.min(Math.max(percent, 0), 100)}%`;
+    }
+
     async function setZoomLevel(newZoom) {
       currentZoom = Math.min(Math.max(newZoom, minZoom), maxZoom);
-      zoomBadge.textContent = `${currentZoom.toFixed(1)}x`;
+      updateZoomPercentageBadge();
 
       if (supportsHardwareZoom && videoTrack) {
         if (isApplyingZoom) return;
@@ -302,15 +298,13 @@
       canvas.style.transform = 'scale(1)';
       zoomBadge.style.display = 'none';
       clearOverlay();
-      placeholderEl.style.display = 'block';
 
-      statusEl.textContent = successMessage || 'Câmera parada';
-      actionBtn.textContent = 'Iniciar Câmera';
+      statusEl.textContent = successMessage || 'Câmera desligada';
+      actionBtn.textContent = 'Iniciar';
       actionBtn.classList.remove('stop-mode');
       actionBtn.disabled = false;
     }
 
-    // Varredura Multi-Escala: alterna entre frame inteiro e recortes ampliados para códigos distantes
     async function detectMultiScale() {
       const vw = video.videoWidth;
       const vh = video.videoHeight;
@@ -318,7 +312,6 @@
 
       frameStep = (frameStep + 1) % 3;
 
-      // Passo 0: Frame completo (pega códigos grandes ou nos cantos da tela)
       if (frameStep === 0) {
         const codes = await detector.detect(video);
         if (codes.length > 0) {
@@ -326,7 +319,6 @@
         }
       }
 
-      // Passo 1: Recorte de 50% central em resolução nativa (pega códigos médios/distantes sem redimensionar)
       if (frameStep === 1) {
         const cw = Math.floor(vw * 0.55);
         const ch = Math.floor(vh * 0.55);
@@ -343,7 +335,6 @@
         }
       }
 
-      // Passo 2: Recorte de 35% central (pega códigos bem pequenos e longe da câmera)
       if (frameStep === 2) {
         const cw = Math.floor(vw * 0.35);
         const ch = Math.floor(vh * 0.35);
@@ -377,6 +368,7 @@
 
           drawBoundingBox(code.cornerPoints, offsetX, offsetY);
           barcodeEl.textContent = code.rawValue;
+          barcodeEl.classList.add('detected');
 
           if (navigator.vibrate) {
             navigator.vibrate(100);
@@ -384,7 +376,7 @@
 
           isScanning = false;
           setTimeout(() => {
-            stopScanner(`Código lido (${code.format.toUpperCase()})!`);
+            stopScanner(`Código lido (${code.format.toUpperCase()})`);
           }, 250);
           return;
         }
@@ -397,32 +389,36 @@
       }
     }
 
-    async function getUltraResCameraStream() {
-      // Solicita a maior resolução possível do sensor (4K -> 2K -> 1080p)
-      const resolutions = [
-        { width: { ideal: 3840 }, height: { ideal: 2160 } },
-        { width: { ideal: 2560 }, height: { ideal: 1440 } },
-        { width: { ideal: 1920 }, height: { ideal: 1080 } }
+    async function getDefaultCameraStream() {
+      // Usa a câmera traseira padrão do celular em alta definição
+      const constraintsList = [
+        {
+          audio: false,
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
+        },
+        {
+          audio: false,
+          video: { facingMode: 'environment' }
+        },
+        {
+          audio: false,
+          video: true
+        }
       ];
 
-      for (const res of resolutions) {
+      for (const constraints of constraintsList) {
         try {
-          return await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: {
-              facingMode: { ideal: 'environment' },
-              ...res
-            }
-          });
+          return await navigator.mediaDevices.getUserMedia(constraints);
         } catch {
-          // Tenta a próxima resolução
+          // Tenta o próximo fallback
         }
       }
 
-      return await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: true
-      });
+      throw new Error('Não foi possível acessar a câmera.');
     }
 
     async function toggleScanner() {
@@ -433,19 +429,19 @@
         return;
       }
 
-      barcodeEl.textContent = 'Aguardando...';
-      statusEl.textContent = 'Abrindo câmera em máxima resolução...';
-      placeholderEl.style.display = 'none';
+      barcodeEl.textContent = 'Procurando código...';
+      barcodeEl.classList.remove('detected');
+      statusEl.textContent = 'Iniciando câmera...';
 
       try {
-        stream = await getUltraResCameraStream();
+        stream = await getDefaultCameraStream();
         video.srcObject = stream;
         await video.play();
 
         videoTrack = stream.getVideoTracks()[0];
         supportsHardwareZoom = false;
         minZoom = 1;
-        maxZoom = 6;
+        maxZoom = 5;
         currentZoom = 1;
 
         if (videoTrack && videoTrack.getCapabilities) {
@@ -459,12 +455,10 @@
           if (caps.zoom) {
             supportsHardwareZoom = true;
             minZoom = caps.zoom.min || 1;
-            maxZoom = Math.min(caps.zoom.max || 6, 8);
-
-            // Inicia com leve zoom (1.6x) se suportado, eliminando o efeito grande-angular
-            const initialSmartZoom = Math.min(Math.max(1.6, minZoom), maxZoom);
-            currentZoom = initialSmartZoom;
-            advanced.push({ zoom: initialSmartZoom });
+            maxZoom = Math.min(caps.zoom.max || 5, 8);
+            // Inicia na câmera padrão (0% de zoom)
+            currentZoom = minZoom;
+            advanced.push({ zoom: minZoom });
           }
 
           if (advanced.length > 0) {
@@ -472,12 +466,12 @@
           }
         }
 
-        zoomBadge.textContent = `${currentZoom.toFixed(1)}x`;
+        updateZoomPercentageBadge();
         zoomBadge.style.display = 'block';
 
         isScanning = true;
-        statusEl.textContent = 'Aponte para o código (faça pinça para aproximar)...';
-        actionBtn.textContent = 'Parar Câmera';
+        statusEl.textContent = 'Aponte para o código (pinça na tela para aproximar)';
+        actionBtn.textContent = 'Parar';
         actionBtn.classList.add('stop-mode');
         actionBtn.disabled = false;
 
@@ -485,9 +479,8 @@
 
       } catch (err) {
         console.error('Erro ao iniciar câmera:', err);
-        stopScanner('Erro: Permissão negada ou câmera indisponível.');
-        barcodeEl.textContent = '---';
-        actionBtn.textContent = 'Tentar Novamente';
+        stopScanner('Erro ao acessar a câmera');
+        barcodeEl.textContent = 'Permissão negada ou indisponível';
       }
     }
 
