@@ -161,9 +161,9 @@
     const barcodeEl = document.getElementById('barcode');
     const statusEl = document.getElementById('status');
 
-    // Canvas auxiliar para leitura em longa distância (multi-escala)
-    const cropCanvas = document.createElement('canvas');
-    const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
+    // Canvas auxiliar com alto contraste para leitura precisa em zoom/proximidade
+    const procCanvas = document.createElement('canvas');
+    const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
 
     const detector = new BarcodeDetector({
       formats: [
@@ -185,12 +185,17 @@
     let scanTimer = null;
     let frameStep = 0;
 
+    // Filtro de estabilidade para evitar leitura errada de dígitos em códigos 1D tremidos
+    let lastCandidateValue = '';
+    let candidateHits = 0;
+
     // Controle de Zoom Máximo Híbrido (0% a 100%)
     let supportsHardwareZoom = false;
     let hwMinZoom = 1;
     let hwMaxZoom = 1;
-    let totalMaxZoom = 10; // Zoom máximo combinado (Hardware + Extra digital)
+    let totalMaxZoom = 10;
     let currentZoom = 1;
+    let currentDigitalScale = 1;
     let initialPinchDistance = 0;
     let initialZoomAtPinch = 1;
     let isApplyingZoom = false;
@@ -210,18 +215,30 @@
       zoomBadge.textContent = `${Math.min(Math.max(percent, 0), 100)}%`;
     }
 
+    async function triggerRefocus() {
+      if (!videoTrack || !videoTrack.getCapabilities) return;
+      try {
+        const caps = videoTrack.getCapabilities();
+        if (caps.focusMode && caps.focusMode.includes('continuous')) {
+          await videoTrack.applyConstraints({
+            advanced: [{ focusMode: 'continuous' }]
+          });
+        }
+      } catch {
+        // Ignora se não suportado
+      }
+    }
+
     async function setZoomLevel(newZoom) {
       currentZoom = Math.min(Math.max(newZoom, hwMinZoom), totalMaxZoom);
       updateZoomPercentageBadge();
 
       if (supportsHardwareZoom && videoTrack) {
-        // Aplica até o limite máximo absoluto da lente física
         const targetHwZoom = Math.min(currentZoom, hwMaxZoom);
-        // Se o usuário puxou além do limite físico, complementa com ampliação digital suave
-        const extraDigitalScale = currentZoom > hwMaxZoom ? (currentZoom / hwMaxZoom) : 1;
+        currentDigitalScale = currentZoom > hwMaxZoom ? (currentZoom / hwMaxZoom) : 1;
 
-        video.style.transform = `scale(${extraDigitalScale})`;
-        canvas.style.transform = `scale(${extraDigitalScale})`;
+        video.style.transform = `scale(${currentDigitalScale})`;
+        canvas.style.transform = `scale(${currentDigitalScale})`;
 
         if (isApplyingZoom) return;
         isApplyingZoom = true;
@@ -235,8 +252,9 @@
           isApplyingZoom = false;
         }
       } else {
-        video.style.transform = `scale(${currentZoom})`;
-        canvas.style.transform = `scale(${currentZoom})`;
+        currentDigitalScale = currentZoom;
+        video.style.transform = `scale(${currentDigitalScale})`;
+        canvas.style.transform = `scale(${currentDigitalScale})`;
       }
     }
 
@@ -256,8 +274,10 @@
     }, { passive: false });
 
     scannerBox.addEventListener('touchend', (e) => {
-      if (e.touches.length < 2) {
+      if (e.touches.length < 2 && initialPinchDistance > 0) {
         initialPinchDistance = 0;
+        // Recalibra o foco da lente após ajustar o zoom
+        triggerRefocus();
       }
     });
 
@@ -300,6 +320,7 @@
       video.srcObject = null;
       video.style.transform = 'scale(1)';
       canvas.style.transform = 'scale(1)';
+      currentDigitalScale = 1;
       zoomBadge.style.display = 'none';
       clearOverlay();
 
@@ -308,47 +329,60 @@
       startBtn.disabled = false;
     }
 
-    async function detectMultiScale() {
+    // Desenha a região no canvas aplicando contraste alto para leitura precisa de barras
+    function captureEnhancedCrop(sx, sy, cw, ch) {
+      procCanvas.width = cw;
+      procCanvas.height = ch;
+      procCtx.filter = 'grayscale(1) contrast(1.45)';
+      procCtx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
+      procCtx.filter = 'none';
+    }
+
+    async function detectPrecisionMultiScale() {
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       if (!vw || !vh) return null;
 
+      // Calcula a área real visível na tela considerando o zoom digital aplicado
+      const visibleW = Math.floor(vw / currentDigitalScale);
+      const visibleH = Math.floor(vh / currentDigitalScale);
+      const visibleX = Math.floor((vw - visibleW) / 2);
+      const visibleY = Math.floor((vh - visibleH) / 2);
+
       frameStep = (frameStep + 1) % 3;
 
+      // Passo 0: Toda a área visível na tela com realce de contraste (ótimo para códigos grandes/aproximados)
       if (frameStep === 0) {
-        const codes = await detector.detect(video);
+        captureEnhancedCrop(visibleX, visibleY, visibleW, visibleH);
+        const codes = await detector.detect(procCanvas);
         if (codes.length > 0) {
-          return { code: codes[0], offsetX: 0, offsetY: 0 };
+          return { code: codes[0], offsetX: visibleX, offsetY: visibleY };
         }
       }
 
+      // Passo 1: Faixa horizontal larga (85% largura x 45% altura) com contraste alto — ideal para códigos de barras 1D aproximados
       if (frameStep === 1) {
-        const cw = Math.floor(vw * 0.5);
-        const ch = Math.floor(vh * 0.5);
-        const sx = Math.floor((vw - cw) / 2);
-        const sy = Math.floor((vh - ch) / 2);
+        const cw = Math.floor(visibleW * 0.85);
+        const ch = Math.floor(visibleH * 0.45);
+        const sx = visibleX + Math.floor((visibleW - cw) / 2);
+        const sy = visibleY + Math.floor((visibleH - ch) / 2);
 
-        cropCanvas.width = cw;
-        cropCanvas.height = ch;
-        cropCtx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
-
-        const codes = await detector.detect(cropCanvas);
+        captureEnhancedCrop(sx, sy, cw, ch);
+        const codes = await detector.detect(procCanvas);
         if (codes.length > 0) {
           return { code: codes[0], offsetX: sx, offsetY: sy };
         }
       }
 
+      // Passo 2: Recorte central concentrado (40% da área visível) com contraste alto — ideal para códigos muito pequenos/distantes
       if (frameStep === 2) {
-        const cw = Math.floor(vw * 0.25);
-        const ch = Math.floor(vh * 0.25);
-        const sx = Math.floor((vw - cw) / 2);
-        const sy = Math.floor((vh - ch) / 2);
+        const cw = Math.floor(visibleW * 0.40);
+        const ch = Math.floor(visibleH * 0.40);
+        const sx = visibleX + Math.floor((visibleW - cw) / 2);
+        const sy = visibleY + Math.floor((visibleH - ch) / 2);
 
-        cropCanvas.width = cw;
-        cropCanvas.height = ch;
-        cropCtx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
-
-        const codes = await detector.detect(cropCanvas);
+        captureEnhancedCrop(sx, sy, cw, ch);
+        const codes = await detector.detect(procCanvas);
         if (codes.length > 0) {
           return { code: codes[0], offsetX: sx, offsetY: sy };
         }
@@ -359,36 +393,47 @@
 
     async function scanLoop() {
       if (!isScanning || video.readyState < 2) {
-        if (isScanning) scanTimer = setTimeout(scanLoop, 60);
+        if (isScanning) scanTimer = setTimeout(scanLoop, 55);
         return;
       }
 
       try {
-        const result = await detectMultiScale();
+        const result = await detectPrecisionMultiScale();
 
         if (result && isScanning) {
           const { code, offsetX, offsetY } = result;
+          const isQrCode = code.format === 'qr_code';
 
-          drawBoundingBox(code.cornerPoints, offsetX, offsetY);
-          barcodeEl.textContent = code.rawValue;
-          barcodeEl.classList.add('detected');
-
-          if (navigator.vibrate) {
-            navigator.vibrate(100);
+          // QR Codes possuem correção de erro nativa; códigos de barras 1D exigem 2 confirmações seguidas para precisão máxima
+          if (code.rawValue === lastCandidateValue) {
+            candidateHits++;
+          } else {
+            lastCandidateValue = code.rawValue;
+            candidateHits = 1;
           }
 
-          isScanning = false;
-          setTimeout(() => {
-            stopScanner(`Código lido (${code.format.toUpperCase()})`);
-          }, 250);
-          return;
+          if (isQrCode || candidateHits >= 2) {
+            drawBoundingBox(code.cornerPoints, offsetX, offsetY);
+            barcodeEl.textContent = code.rawValue;
+            barcodeEl.classList.add('detected');
+
+            if (navigator.vibrate) {
+              navigator.vibrate(100);
+            }
+
+            isScanning = false;
+            setTimeout(() => {
+              stopScanner(`Código lido (${code.format.toUpperCase()})`);
+            }, 250);
+            return;
+          }
         }
       } catch (err) {
         console.error('Erro no frame:', err);
       }
 
       if (isScanning) {
-        scanTimer = setTimeout(scanLoop, 60);
+        scanTimer = setTimeout(scanLoop, 55);
       }
     }
 
@@ -446,6 +491,9 @@
       if (isScanning) return;
       startBtn.disabled = true;
 
+      lastCandidateValue = '';
+      candidateHits = 0;
+
       barcodeEl.textContent = 'Procurando código...';
       barcodeEl.classList.remove('detected');
       statusEl.textContent = 'Iniciando câmera em qualidade máxima...';
@@ -461,6 +509,7 @@
         hwMaxZoom = 1;
         totalMaxZoom = 10;
         currentZoom = 1;
+        currentDigitalScale = 1;
 
         if (videoTrack && videoTrack.getCapabilities) {
           const caps = videoTrack.getCapabilities();
@@ -484,9 +533,7 @@
           if (caps.zoom) {
             supportsHardwareZoom = true;
             hwMinZoom = caps.zoom.min || 1;
-            // Libera 100% do zoom máximo da lente do aparelho
             hwMaxZoom = caps.zoom.max || 10;
-            // Adiciona mais 2x de ampliação digital após atingir o topo físico da câmera
             totalMaxZoom = hwMaxZoom * 2;
             currentZoom = hwMinZoom;
             advanced.push({ zoom: hwMinZoom });
