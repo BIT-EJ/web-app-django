@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Leitor de Código de Barras</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <title>Leitor de Código</title>
 
   <style>
     * {
@@ -34,7 +33,7 @@
     .scanner-box {
       width: 100%;
       max-width: 500px;
-      min-height: 280px;
+      height: 360px;
       background: #000;
       border: 2px solid #333;
       border-radius: 16px;
@@ -45,19 +44,22 @@
       position: relative;
     }
 
-    #reader {
+    video, canvas {
+      position: absolute;
+      inset: 0;
       width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
 
-    #reader video {
-      object-fit: cover;
-      border-radius: 14px;
+    canvas {
+      pointer-events: none;
     }
 
     .placeholder-text {
       color: #666;
       font-size: 14px;
-      position: absolute;
+      z-index: 1;
       pointer-events: none;
     }
 
@@ -127,11 +129,12 @@
 
 <body>
 
-  <h1>Leitor de Código de Barras</h1>
+  <h1>Leitor de Código</h1>
 
   <div class="scanner-box">
     <span class="placeholder-text" id="placeholder">Câmera desligada</span>
-    <div id="reader"></div>
+    <video id="camera" autoplay muted playsinline></video>
+    <canvas id="overlay"></canvas>
   </div>
 
   <div class="result">
@@ -143,47 +146,137 @@
 
   <button id="action-btn">Iniciar Câmera</button>
 
-  <script>
+  <script type="module">
+    // Motor ZXing compilado em WebAssembly (mesmo motor C++ usado em apps nativos)
+    import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es/pure.min.js';
+
+    const video = document.getElementById('camera');
+    const canvas = document.getElementById('overlay');
+    const ctx = canvas.getContext('2d');
     const actionBtn = document.getElementById('action-btn');
     const barcodeEl = document.getElementById('barcode');
     const statusEl = document.getElementById('status');
     const placeholderEl = document.getElementById('placeholder');
 
-    const html5QrCode = new Html5Qrcode("reader", {
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.ITF,
-        Html5QrcodeSupportedFormats.CODABAR,
-        Html5QrcodeSupportedFormats.QR_CODE
-      ],
-      experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true
-      },
-      verbose: false
+    const detector = new BarcodeDetector({
+      formats: [
+        'qr_code',
+        'ean_13',
+        'ean_8',
+        'upc_a',
+        'upc_e',
+        'code_128',
+        'code_39',
+        'itf',
+        'codabar'
+      ]
     });
 
+    let stream = null;
     let isScanning = false;
+    let scanTimer = null;
 
-    async function stopScanner(successMessage = null) {
-      if (!isScanning) return;
+    function clearOverlay() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function drawBoundingBox(cornerPoints) {
+      if (!cornerPoints || cornerPoints.length < 4) return;
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#00ff88';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(cornerPoints[0].x, cornerPoints[0].y);
+      for (let i = 1; i < cornerPoints.length; i++) {
+        ctx.lineTo(cornerPoints[i].x, cornerPoints[i].y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    function stopScanner(successMessage = null) {
+      isScanning = false;
+
+      if (scanTimer) {
+        clearTimeout(scanTimer);
+        scanTimer = null;
+      }
+
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+
+      video.srcObject = null;
+      clearOverlay();
+      placeholderEl.style.display = 'block';
+
+      statusEl.textContent = successMessage || 'Câmera parada';
+      actionBtn.textContent = 'Iniciar Câmera';
+      actionBtn.classList.remove('stop-mode');
+      actionBtn.disabled = false;
+    }
+
+    async function scanLoop() {
+      if (!isScanning || video.readyState < 2) {
+        if (isScanning) scanTimer = setTimeout(scanLoop, 80);
+        return;
+      }
 
       try {
-        await html5QrCode.stop();
-        html5QrCode.clear();
+        // Analisa 100% do frame da câmera sem exigir centralização
+        const barcodes = await detector.detect(video);
+
+        if (barcodes.length > 0 && isScanning) {
+          const found = barcodes[0];
+
+          // Desenha o contorno verde exatamente onde o código foi achado na tela
+          drawBoundingBox(found.cornerPoints);
+
+          barcodeEl.textContent = found.rawValue;
+
+          if (navigator.vibrate) {
+            navigator.vibrate(100);
+          }
+
+          // Pequena pausa visual de 250ms para ver o contorno verde no código antes de fechar
+          isScanning = false;
+          setTimeout(() => {
+            stopScanner(`Código lido (${found.format.toUpperCase()})!`);
+          }, 250);
+          return;
+        }
       } catch (err) {
-        console.error('Erro ao parar:', err);
-      } finally {
-        isScanning = false;
-        placeholderEl.style.display = 'block';
-        statusEl.textContent = successMessage || 'Câmera parada';
-        actionBtn.textContent = 'Iniciar Câmera';
-        actionBtn.classList.remove('stop-mode');
-        actionBtn.disabled = false;
+        console.error('Erro no frame:', err);
+      }
+
+      if (isScanning) {
+        scanTimer = setTimeout(scanLoop, 80);
+      }
+    }
+
+    async function getBestCameraStream() {
+      // Pede Full HD (1080p) para permitir leitura a longa distância
+      const highResConstraints = {
+        audio: false,
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      };
+
+      try {
+        return await navigator.mediaDevices.getUserMedia(highResConstraints);
+      } catch {
+        return await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: true
+        });
       }
     }
 
@@ -191,82 +284,52 @@
       actionBtn.disabled = true;
 
       if (isScanning) {
-        await stopScanner();
+        stopScanner();
         return;
       }
 
       barcodeEl.textContent = 'Aguardando...';
-      statusEl.textContent = 'Abrindo câmera...';
+      statusEl.textContent = 'Abrindo câmera em alta definição...';
       placeholderEl.style.display = 'none';
 
-      // Calcula a área de leitura proporcional ao tamanho real do vídeo
-      const qrboxFunction = (viewfinderWidth, viewfinderHeight) => {
-        const width = Math.floor(viewfinderWidth * 0.85);
-        const height = Math.floor(viewfinderHeight * 0.45);
-        return {
-          width: Math.max(220, width),
-          height: Math.max(110, height)
-        };
-      };
-
-      const config = {
-        fps: 20,
-        qrbox: qrboxFunction,
-        videoConstraints: {
-          facingMode: "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          focusMode: "continuous"
-        }
-      };
-
       try {
-        await html5QrCode.start(
-          { facingMode: "environment" },
-          config,
-          (decodedText, decodedResult) => {
-            barcodeEl.textContent = decodedText;
+        stream = await getBestCameraStream();
+        video.srcObject = stream;
+        await video.play();
 
-            if (navigator.vibrate) {
-              navigator.vibrate(100);
-            }
+        // Ativa foco contínuo e zoom leve (1.5x) se o aparelho suportar, ajudando na leitura de longe
+        const track = stream.getVideoTracks()[0];
+        if (track && track.getCapabilities && track.applyConstraints) {
+          const caps = track.getCapabilities();
+          const advanced = [];
 
-            const formatName = decodedResult?.result?.format?.formatName || '';
-            const msg = formatName
-              ? `Código lido (${formatName})!`
-              : 'Código lido com sucesso!';
-
-            stopScanner(msg);
-          },
-          () => {
-            // Ignora frames sem código detectado
+          if (caps.focusMode && caps.focusMode.includes('continuous')) {
+            advanced.push({ focusMode: 'continuous' });
           }
-        );
+
+          if (advanced.length > 0) {
+            track.applyConstraints({ advanced }).catch(() => {});
+          }
+        }
 
         isScanning = true;
-        statusEl.textContent = 'Centralize o código de barras na área marcada...';
+        statusEl.textContent = 'Aponte a câmera para o código (qualquer posição)...';
         actionBtn.textContent = 'Parar Câmera';
         actionBtn.classList.add('stop-mode');
         actionBtn.disabled = false;
 
+        scanLoop();
+
       } catch (err) {
         console.error('Erro ao iniciar câmera:', err);
-        placeholderEl.style.display = 'block';
+        stopScanner('Erro: Permissão negada ou câmera indisponível.');
         barcodeEl.textContent = '---';
-        statusEl.textContent = 'Erro ao acessar a câmera. Verifique as permissões.';
         actionBtn.textContent = 'Tentar Novamente';
-        actionBtn.classList.remove('stop-mode');
-        actionBtn.disabled = false;
       }
     }
 
     actionBtn.addEventListener('click', toggleScanner);
-
-    window.addEventListener('pagehide', () => {
-      if (isScanning) {
-        html5QrCode.stop().catch(() => {});
-      }
-    });
+    window.addEventListener('pagehide', () => stopScanner());
   </script>
 
 </body>
