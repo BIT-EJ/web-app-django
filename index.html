@@ -177,15 +177,21 @@
     }
   }
 
-  let busy = false, last = 0;
-  async function loop(ts) {
-    requestAnimationFrame(loop);
-    if (busy || ts - last < 100) return;                // DetectionSpeed.normal
-    busy = true; last = ts;
+  // Lê TODO frame novo da câmera, sem espera e sem depender da imagem ficar parada.
+  // Enquanto um frame está sendo analisado, o próximo já é pego logo em seguida.
+  let busy = false;
+  async function processar() {
+    if (busy) return;
+    busy = true;
     try {
       const r = await lerFrame();
       if (r) onDetect(r.valor, r.formato);
     } finally { busy = false; }
+  }
+  function loop() {
+    processar();
+    if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop); // um por frame de vídeo
+    else requestAnimationFrame(loop);
   }
 
   // ---------- Zoom ----------
@@ -286,7 +292,7 @@
       if (caps.focusMode && caps.focusMode.includes('continuous')) {
         track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
       }
-      requestAnimationFrame(loop);
+      loop();
     } catch (e) {
       const el = $('erro'); el.style.display = 'flex';
       el.textContent = 'Não foi possível acessar a câmera. Permita o acesso e abra a página em HTTPS (ou localhost).';
