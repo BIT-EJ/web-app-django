@@ -109,9 +109,9 @@
       color: #008a4b;
     }
 
-    #action-btn {
+    #start-btn {
       flex-shrink: 0;
-      padding: 12px 18px;
+      padding: 12px 20px;
       border: none;
       border-radius: 12px;
       font-size: 14px;
@@ -122,16 +122,11 @@
       transition: opacity 0.2s, transform 0.1s;
     }
 
-    #action-btn:active {
+    #start-btn:active {
       transform: scale(0.96);
     }
 
-    #action-btn.stop-mode {
-      background: #e63946;
-      color: #ffffff;
-    }
-
-    #action-btn:disabled {
+    #start-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
@@ -151,7 +146,7 @@
       <div id="status">Câmera desligada</div>
       <div id="barcode">Aguardando leitura...</div>
     </div>
-    <button id="action-btn">Iniciar</button>
+    <button id="start-btn">Iniciar</button>
   </div>
 
   <script type="module">
@@ -162,7 +157,7 @@
     const canvas = document.getElementById('overlay');
     const ctx = canvas.getContext('2d');
     const zoomBadge = document.getElementById('zoom-badge');
-    const actionBtn = document.getElementById('action-btn');
+    const startBtn = document.getElementById('start-btn');
     const barcodeEl = document.getElementById('barcode');
     const statusEl = document.getElementById('status');
 
@@ -300,9 +295,8 @@
       clearOverlay();
 
       statusEl.textContent = successMessage || 'Câmera desligada';
-      actionBtn.textContent = 'Iniciar';
-      actionBtn.classList.remove('stop-mode');
-      actionBtn.disabled = false;
+      startBtn.style.display = 'inline-block';
+      startBtn.disabled = false;
     }
 
     async function detectMultiScale() {
@@ -389,15 +383,34 @@
       }
     }
 
-    async function getDefaultCameraStream() {
-      // Usa a câmera traseira padrão do celular em alta definição
+    async function getMaxQualityCameraStream() {
+      // Solicita a qualidade máxima suportada pelo sensor (4K -> 2K -> Full HD -> Padrão)
       const constraintsList = [
         {
           audio: false,
           video: {
             facingMode: 'environment',
+            width: { ideal: 3840 },
+            height: { ideal: 2160 },
+            frameRate: { ideal: 30 }
+          }
+        },
+        {
+          audio: false,
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 2560 },
+            height: { ideal: 1440 },
+            frameRate: { ideal: 30 }
+          }
+        },
+        {
+          audio: false,
+          video: {
+            facingMode: 'environment',
             width: { ideal: 1920 },
-            height: { ideal: 1080 }
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 }
           }
         },
         {
@@ -414,27 +427,23 @@
         try {
           return await navigator.mediaDevices.getUserMedia(constraints);
         } catch {
-          // Tenta o próximo fallback
+          // Tenta o próximo nível de resolução
         }
       }
 
       throw new Error('Não foi possível acessar a câmera.');
     }
 
-    async function toggleScanner() {
-      actionBtn.disabled = true;
-
-      if (isScanning) {
-        stopScanner();
-        return;
-      }
+    async function startScanner() {
+      if (isScanning) return;
+      startBtn.disabled = true;
 
       barcodeEl.textContent = 'Procurando código...';
       barcodeEl.classList.remove('detected');
-      statusEl.textContent = 'Iniciando câmera...';
+      statusEl.textContent = 'Iniciando câmera em qualidade máxima...';
 
       try {
-        stream = await getDefaultCameraStream();
+        stream = await getMaxQualityCameraStream();
         video.srcObject = stream;
         await video.play();
 
@@ -448,6 +457,18 @@
           const caps = videoTrack.getCapabilities();
           const advanced = [];
 
+          // Força a largura e altura máximas exatas relatadas pelo sensor
+          const maxConstraints = {};
+          if (caps.width && caps.width.max) {
+            maxConstraints.width = { ideal: caps.width.max };
+          }
+          if (caps.height && caps.height.max) {
+            maxConstraints.height = { ideal: caps.height.max };
+          }
+          if (Object.keys(maxConstraints).length > 0) {
+            await videoTrack.applyConstraints(maxConstraints).catch(() => {});
+          }
+
           if (caps.focusMode && caps.focusMode.includes('continuous')) {
             advanced.push({ focusMode: 'continuous' });
           }
@@ -456,7 +477,6 @@
             supportsHardwareZoom = true;
             minZoom = caps.zoom.min || 1;
             maxZoom = Math.min(caps.zoom.max || 5, 8);
-            // Inicia na câmera padrão (0% de zoom)
             currentZoom = minZoom;
             advanced.push({ zoom: minZoom });
           }
@@ -469,12 +489,11 @@
         updateZoomPercentageBadge();
         zoomBadge.style.display = 'block';
 
+        // Esconde o botão Iniciar enquanto a leitura está ativa
+        startBtn.style.display = 'none';
+
         isScanning = true;
         statusEl.textContent = 'Aponte para o código (pinça na tela para aproximar)';
-        actionBtn.textContent = 'Parar';
-        actionBtn.classList.add('stop-mode');
-        actionBtn.disabled = false;
-
         scanLoop();
 
       } catch (err) {
@@ -484,7 +503,7 @@
       }
     }
 
-    actionBtn.addEventListener('click', toggleScanner);
+    startBtn.addEventListener('click', startScanner);
     window.addEventListener('pagehide', () => stopScanner());
   </script>
 
