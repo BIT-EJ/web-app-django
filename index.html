@@ -32,18 +32,15 @@
     position: absolute; z-index: 2; top: 12px; right: 12px; background: rgba(0,0,0,.54); color: #fff;
     padding: 4px 10px; border-radius: 12px; font-size: 14px; pointer-events: none;
   }
-  #roi {
-    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-    width: min(88%, 560px); height: min(34%, 220px); pointer-events: none; border-radius: 12px;
-    box-shadow: 0 0 0 9999px rgba(0,0,0,.55); border: 2px solid rgba(255,255,255,.35);
-  }
+  #shade { position: absolute; inset: 0; display: grid; pointer-events: none;
+    grid-template-columns: 1fr min(88%, 560px) 1fr; grid-template-rows: 1fr min(34%, 220px) 1fr; }
+  #shade > div { background: rgba(0,0,0,.55); }
+  #shade > #roi { background: transparent; position: relative; outline: 2px solid rgba(255,255,255,.35); border-radius: 0; }
   #roi i { position: absolute; width: 26px; height: 26px; border: 4px solid #d0bcff; }
-  #roi i:nth-child(1) { left: -2px; top: -2px; border-right: 0; border-bottom: 0; border-top-left-radius: 12px; }
-  #roi i:nth-child(2) { right: -2px; top: -2px; border-left: 0; border-bottom: 0; border-top-right-radius: 12px; }
-  #roi i:nth-child(3) { left: -2px; bottom: -2px; border-right: 0; border-top: 0; border-bottom-left-radius: 12px; }
-  #roi i:nth-child(4) { right: -2px; bottom: -2px; border-left: 0; border-top: 0; border-bottom-right-radius: 12px; }
-  #roi b { position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; background: rgba(255,82,82,.8); animation: varre 1.6s ease-in-out infinite alternate; }
-  @keyframes varre { from { top: 12%; } to { top: 88%; } }
+  #roi i:nth-child(1) { left: -4px; top: -4px; border-right: 0; border-bottom: 0; }
+  #roi i:nth-child(2) { right: -4px; top: -4px; border-left: 0; border-bottom: 0; }
+  #roi i:nth-child(3) { left: -4px; bottom: -4px; border-right: 0; border-top: 0; }
+  #roi i:nth-child(4) { right: -4px; bottom: -4px; border-left: 0; border-top: 0; }
   #erro { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; color: #fff; padding: 24px; }
 
   #painel {
@@ -74,8 +71,8 @@
   </header>
 
   <div id="camera">
-    <video id="video" playsinline muted autoplay></video>
-    <div id="roi"><i></i><i></i><i></i><i></i><b></b></div>
+    <video id="video" playsinline muted autoplay disablepictureinpicture></video>
+    <div id="shade"><div></div><div></div><div></div><div></div><div id="roi"><i></i><i></i><i></i><i></i></div><div></div><div></div><div></div><div></div></div>
     <div id="zoom">Zoom 0%</div>
     <div id="erro"></div>
   </div>
@@ -108,36 +105,46 @@
   const DIGITAL_MAX = 4;                   // zoom digital máximo (quando a câmera não tem zoom por hardware)
 
   // ---------- Leitores (todos os formatos) ----------
-  // 1) zxing-wasm (zxing-cpp em WebAssembly, o motor mais forte para web: tolera código
-  //    pequeno, pixelado, girado e invertido)  2) BarcodeDetector nativo  3) ZXing-js
+  // Principal: zxing-wasm (zxing-cpp) rodando num Web Worker, fora da thread da tela,
+  // então a câmera não trava. Reserva: BarcodeDetector nativo e ZXing-js na thread principal.
   const Z = window.ZXing;
   const hints = new Map();
   hints.set(Z.DecodeHintType.TRY_HARDER, true);
   const zxing = new Z.MultiFormatReader();
   zxing.setHints(hints);
 
-  let wasm = null;
-  async function initWasm() {
-    const urls = [
-      'https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.0/dist/es/reader/index.js',
-      'https://cdn.jsdelivr.net/npm/zxing-wasm@2/reader/+esm',
-      'https://esm.sh/zxing-wasm@2/reader'
-    ];
-    for (const u of urls) {
-      try {
-        const m = await import(u);
-        if (m.readBarcodes) { wasm = m; return; }
-      } catch (e) { /* tenta o próximo */ }
-    }
-  }
+  const WASM_URLS = [
+    'https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.0/dist/es/reader/index.js',
+    'https://cdn.jsdelivr.net/npm/zxing-wasm@2/reader/+esm',
+    'https://esm.sh/zxing-wasm@2/reader'
+  ];
+  const WASM_OPTS = { formats: [], tryHarder: true, tryRotate: true, tryInvert: true,
+                      tryDownscale: true, maxNumberOfSymbols: 1 };
 
-  let nativeDetector = null;
-  async function initNative() {
-    if (!('BarcodeDetector' in window)) return;
-    try {
-      const fmts = await BarcodeDetector.getSupportedFormats();
-      nativeDetector = new BarcodeDetector({ formats: fmts });
-    } catch (e) { nativeDetector = null; }
+  // ----- código do worker -----
+  function workerMain(urls, opts) {
+    let mod = null, cv = null, cx = null;
+    const ready = (async () => {
+      for (const u of urls) {
+        try { const m = await import(u); if (m.readBarcodes) { mod = m; return true; } } catch (e) {}
+      }
+      return false;
+    })();
+    onmessage = async (e) => {
+      const { id, bitmap } = e.data;
+      try {
+        if (!(await ready)) { bitmap.close(); postMessage({ id, error: 'nowasm' }); return; }
+        const w = bitmap.width, h = bitmap.height;
+        if (!cv || cv.width !== w || cv.height !== h) {
+          cv = new OffscreenCanvas(w, h);
+          cx = cv.getContext('2d', { willReadFrequently: true });
+        }
+        cx.drawImage(bitmap, 0, 0); bitmap.close();
+        const res = await mod.readBarcodes(cx.getImageData(0, 0, w, h), opts);
+        const b = res.find(x => x.text && x.isValid !== false);
+        postMessage({ id, r: b ? { valor: b.text, formato: b.format } : null });
+      } catch (err) { postMessage({ id, error: String(err) }); }
+    };
   }
 
   // nomes de formato iguais aos do Flutter
@@ -148,7 +155,44 @@
     return FLUTTER_FMT[k] || k;
   };
 
-  // ---------- Área de leitura (só a moldura central é analisada) ----------
+  let worker = null, workerOk = false, jobId = 0;
+  const pendentes = new Map();
+  let wasm = null;                       // reserva na thread principal
+  async function initWasmMain() {
+    for (const u of WASM_URLS) {
+      try { const m = await import(u); if (m.readBarcodes) { wasm = m; return; } } catch (e) {}
+    }
+  }
+  function falhaWorker() {
+    workerOk = false;
+    for (const [, res] of pendentes) res(null);
+    pendentes.clear();
+    if (!wasm) initWasmMain();
+  }
+  function initWorker() {
+    try {
+      const src = `(${workerMain.toString()})(${JSON.stringify(WASM_URLS)}, ${JSON.stringify(WASM_OPTS)})`;
+      worker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      worker.onmessage = (e) => {
+        const { id, r, error } = e.data;
+        const res = pendentes.get(id);
+        if (error === 'nowasm') return falhaWorker();
+        if (res) { pendentes.delete(id); res(r ? { valor: r.valor, formato: fmtName(r.formato) } : null); }
+      };
+      worker.onerror = falhaWorker;
+      workerOk = true;
+    } catch (e) { falhaWorker(); }
+  }
+
+  let nativeDetector = null;
+  async function initNative() {
+    if (!('BarcodeDetector' in window)) return;
+    try {
+      nativeDetector = new BarcodeDetector({ formats: await BarcodeDetector.getSupportedFormats() });
+    } catch (e) { nativeDetector = null; }
+  }
+
+  // ---------- Área de leitura: SÓ o que está dentro da caixa central ----------
   const roiEl = $('roi');
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -164,58 +208,62 @@
       vh / 2 + ((y - cr.top - cr.height / 2) / f) / s
     ];
     let [x0, y0] = conv(rr.left, rr.top), [x1, y1] = conv(rr.right, rr.bottom);
-    x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(vw, x1); y1 = Math.min(vh, y1);
+    x0 = Math.max(0, Math.round(x0)); y0 = Math.max(0, Math.round(y0));
+    x1 = Math.min(vw, Math.round(x1)); y1 = Math.min(vh, Math.round(y1));
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   }
+  // fator de escala: amplia se a caixa for pequena na imagem, limita se for enorme
+  const fatorEscala = (r) => { const m = Math.max(r.w, r.h); return m < 700 ? Math.min(3, 700 / m) : Math.min(1, 1800 / m); };
 
-  // Copia só a região central. Se estiver pequena/pixelada, amplia (suavizado) para o decodificador.
-  function roiToCanvas(rotate) {
-    const r = roiVideoRect();
-    if (!r || r.w < 8 || r.h < 8) return false;
-    const m = Math.max(r.w, r.h);
-    const k = m < 700 ? Math.min(3, 700 / m) : Math.min(1, 1600 / m);
-    const w = Math.round(r.w * k), h = Math.round(r.h * k);
+  function roiToCanvas(r) {
+    const k = fatorEscala(r);
+    canvas.width = Math.round(r.w * k); canvas.height = Math.round(r.h * k);
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-    if (rotate) {
-      canvas.width = h; canvas.height = w;
-      ctx.save(); ctx.translate(h, 0); ctx.rotate(Math.PI / 2);
-      ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, w, h);
-      ctx.restore();
-    } else {
-      canvas.width = w; canvas.height = h;
-      ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, w, h);
-    }
-    return true;
+    ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
   }
 
-  let tick = 0;
   async function lerFrame() {
     if (!video.videoWidth) return null;
-    tick++;
+    const r = roiVideoRect();
+    if (!r || r.w < 8 || r.h < 8) return null;
 
-    if (wasm) {
+    // 1) Worker (não trava a tela)
+    if (workerOk) {
+      let bmp;
       try {
-        if (!roiToCanvas(false)) return null;
-        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const res = await wasm.readBarcodes(img, {
-          formats: [], tryHarder: true, tryRotate: true, tryInvert: true,
-          tryDownscale: true, maxNumberOfSymbols: 1
+        const k = fatorEscala(r);
+        bmp = await createImageBitmap(video, r.x, r.y, r.w, r.h, {
+          resizeWidth: Math.round(r.w * k), resizeHeight: Math.round(r.h * k), resizeQuality: 'high'
         });
-        for (const b of res) if (b.text && b.isValid !== false) return { valor: b.text, formato: fmtName(b.format) };
-        return null;
-      } catch (e) { wasm = null; /* cai para os outros leitores */ }
+      } catch (e) {
+        roiToCanvas(r);
+        try { bmp = await createImageBitmap(canvas); } catch (e2) { return null; }
+      }
+      return new Promise(res => {
+        const id = ++jobId;
+        const t = setTimeout(() => { if (pendentes.delete(id)) res(null); }, 8000);
+        pendentes.set(id, v => { clearTimeout(t); res(v); });
+        worker.postMessage({ id, bitmap: bmp }, [bmp]);
+      });
     }
 
-    if (!roiToCanvas(false)) return null;
+    // 2) Reserva na thread principal
+    roiToCanvas(r);
+    if (wasm) {
+      try {
+        const res = await wasm.readBarcodes(ctx.getImageData(0, 0, canvas.width, canvas.height), WASM_OPTS);
+        for (const b of res) if (b.text && b.isValid !== false) return { valor: b.text, formato: fmtName(b.format) };
+        return null;
+      } catch (e) { wasm = null; }
+    }
     if (nativeDetector) {
       try {
-        const r = await nativeDetector.detect(canvas);
-        for (const b of r) if (b.rawValue) return { valor: b.rawValue, formato: fmtName(b.format) };
+        const d = await nativeDetector.detect(canvas);
+        for (const b of d) if (b.rawValue) return { valor: b.rawValue, formato: fmtName(b.format) };
         return null;
       } catch (e) { nativeDetector = null; }
     }
     try {
-      if (tick % 2 === 0) roiToCanvas(true);   // alterna normal / girado 90°
       const lum = new Z.HTMLCanvasElementLuminanceSource(canvas);
       const res = zxing.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(lum)));
       const t = res.getText();
@@ -225,15 +273,24 @@
   }
 
   // ---------- Detecção (equivale ao onDetect) ----------
+  // Precisão: só aceita um código novo depois de lê-lo 2 vezes iguais em até 1,5 s,
+  // o que elimina leituras erradas ocasionais.
+  let pend = { v: null, t: 0 };
   function onDetect(valor, fmt) {
-    if (valor && valor !== resultado) {
+    if (!valor) return;
+    if (valor === resultado) { pend.v = null; return; }
+    const agora = performance.now();
+    if (pend.v === valor && agora - pend.t < 1500) {
+      pend.v = null;
       if (navigator.vibrate) navigator.vibrate(200);   // vibra ao ler um código novo
       resultado = valor; formato = fmt;
       render();
+    } else {
+      pend = { v: valor, t: agora };
     }
   }
 
-  // Analisa só ~8 frames por segundo, e apenas a área central (processamento bem menor).
+  // ~8 análises por segundo, só da área central, fora da thread principal.
   const INTERVALO_MS = 120;
   let busy = false, last = 0;
   async function processar() {
@@ -244,10 +301,8 @@
     } finally { busy = false; }
   }
   function loop(ts) {
-    if (!busy && (ts || performance.now()) - last >= INTERVALO_MS) {
-      last = ts || performance.now();
-      processar();
-    }
+    const agora = ts || performance.now();
+    if (!busy && agora - last >= INTERVALO_MS) { last = agora; processar(); }
     if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop);
     else requestAnimationFrame(loop);
   }
@@ -336,10 +391,10 @@
   // ---------- Câmera ----------
   async function start() {
     await initNative();
-    initWasm();   // carrega em segundo plano; enquanto isso usa os outros leitores
+    initWorker(); // zxing-wasm em Web Worker (carrega em segundo plano)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
         audio: false
       });
       video.srcObject = stream;
