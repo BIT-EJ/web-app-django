@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Leitor de Código de Barras</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <style>
     * {
@@ -30,99 +31,97 @@
       margin-bottom: 20px;
     }
 
-    .scanner {
+    .scanner-box {
       width: 100%;
-      max-width: 600px;
-      position: relative;
-      overflow: hidden;
-      border-radius: 16px;
+      max-width: 500px;
+      min-height: 260px;
       background: #000;
       border: 2px solid #333;
-      min-height: 250px;
+      border-radius: 16px;
+      overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
+      position: relative;
     }
 
-    video {
+    #reader {
       width: 100%;
-      display: block;
     }
 
-    .scan-line {
+    /* Esconde elementos extras que a lib cria por padrão */
+    #reader__dashboard_section_csr span,
+    #reader__status_span {
+      display: none !important;
+    }
+
+    .placeholder-text {
+      color: #666;
+      font-size: 14px;
       position: absolute;
-      left: 5%;
-      right: 5%;
-      top: 50%;
-      height: 2px;
-      background: #00ff88;
-      box-shadow: 0 0 12px #00ff88;
       pointer-events: none;
     }
 
     .result {
-      margin-top: 25px;
+      margin-top: 20px;
       width: 100%;
-      max-width: 600px;
-      min-height: 110px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
+      max-width: 500px;
       padding: 20px;
       background: #202228;
       border-radius: 12px;
       border: 1px solid #383b44;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
 
     .result-label {
-      font-size: 13px;
+      font-size: 12px;
       color: #aaa;
       text-transform: uppercase;
       letter-spacing: 1px;
     }
 
     #barcode {
-      font-size: clamp(22px, 6vw, 36px);
+      font-size: clamp(22px, 6vw, 34px);
       font-weight: bold;
-      overflow-wrap: anywhere;
       color: #00ff88;
+      overflow-wrap: anywhere;
     }
 
     #status {
-      margin-top: 15px;
+      margin-top: 12px;
       color: #aaa;
       font-size: 14px;
     }
 
-    .buttons {
-      display: flex;
-      gap: 12px;
+    #action-btn {
       margin-top: 20px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-
-    button {
-      padding: 13px 22px;
+      width: 100%;
+      max-width: 500px;
+      padding: 15px;
       border: none;
-      border-radius: 8px;
-      font-size: 15px;
+      border-radius: 10px;
+      font-size: 16px;
       font-weight: bold;
       cursor: pointer;
       background: #00cc77;
       color: #07140e;
+      transition: background 0.2s, transform 0.1s;
     }
 
-    button:disabled {
-      opacity: .4;
-      cursor: not-allowed;
+    #action-btn:active {
+      transform: scale(0.98);
     }
 
-    #stop {
-      background: #353943;
+    #action-btn.stop-mode {
+      background: #ff4757;
       color: white;
+    }
+
+    #action-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
   </style>
 </head>
@@ -131,192 +130,121 @@
 
   <h1>Leitor de Código de Barras</h1>
 
-  <div class="scanner">
-    <video id="camera" autoplay muted playsinline></video>
-    <div class="scan-line"></div>
+  <div class="scanner-box">
+    <span class="placeholder-text" id="placeholder">Câmera desligada</span>
+    <div id="reader"></div>
   </div>
 
   <div class="result">
     <span class="result-label">Código identificado</span>
-    <span id="barcode">Aguardando leitura...</span>
+    <span id="barcode">---</span>
   </div>
 
-  <p id="status">Câmera desligada</p>
+  <p id="status">Clique no botão abaixo para ler</p>
 
-  <div class="buttons">
-    <button id="start">Iniciar câmera</button>
-    <button id="stop" disabled>Parar câmera</button>
-    <button id="clear">Limpar</button>
-  </div>
+  <button id="action-btn">Iniciar Câmera</button>
 
-  <script type="module">
-    import {
-      BrowserMultiFormatReader,
-      BarcodeFormat,
-      DecodeHintType
-    } from 'https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm';
+  <script>
+    const actionBtn = document.getElementById('action-btn');
+    const barcodeEl = document.getElementById('barcode');
+    const statusEl = document.getElementById('status');
+    const placeholderEl = document.getElementById('placeholder');
 
-    const video = document.getElementById('camera');
-    const barcode = document.getElementById('barcode');
-    const status = document.getElementById('status');
-
-    const startButton = document.getElementById('start');
-    const stopButton = document.getElementById('stop');
-    const clearButton = document.getElementById('clear');
-
-    const hints = new Map();
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-      BarcodeFormat.EAN_13,
-      BarcodeFormat.EAN_8,
-      BarcodeFormat.UPC_A,
-      BarcodeFormat.UPC_E,
-      BarcodeFormat.CODE_128,
-      BarcodeFormat.CODE_39,
-      BarcodeFormat.ITF,
-      BarcodeFormat.CODABAR
-    ]);
-
-    const reader = new BrowserMultiFormatReader(hints, {
-      delayBetweenScanAttempts: 100
+    // Inicializa a instância da biblioteca Html5Qrcode
+    const html5QrCode = new Html5Qrcode("reader", {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODABAR
+      ],
+      verbose: false
     });
 
-    let stream = null;
-    let controls = null;
-    let starting = false;
+    let isScanning = false;
 
-    let lastCode = '';
-    let lastReadTime = 0;
+    async function toggleScanner() {
+      actionBtn.disabled = true;
 
-    async function getCameraStream() {
-      // Verifica se o navegador bloqueou por falta de HTTPS
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Acesso à câmera indisponível. Certifique-se de usar HTTPS ou localhost.');
-      }
-
-      try {
-        // 1ª tentativa: Câmera traseira em Alta Definição (Ideal para celulares)
-        return await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        });
-      } catch (err1) {
+      // SE ESTIVER LENDO -> PARA A CÂMERA
+      if (isScanning) {
         try {
-          // 2ª tentativa: Apenas preferência por câmera traseira sem resolução fixa
-          return await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: { facingMode: { ideal: 'environment' } }
-          });
-        } catch (err2) {
-          // 3ª tentativa: Qualquer câmera disponível (Fallback para notebooks/desktops)
-          return await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: true
-          });
+          await html5QrCode.stop();
+          html5QrCode.clear();
+          isScanning = false;
+          placeholderEl.style.display = 'block';
+          statusEl.textContent = 'Câmera parada';
+          actionBtn.textContent = 'Iniciar Câmera';
+          actionBtn.classList.remove('stop-mode');
+        } catch (err) {
+          console.error('Erro ao parar:', err);
+        } finally {
+          actionBtn.disabled = false;
         }
+        return;
       }
-    }
 
-    async function startCamera() {
-      if (starting || stream) return;
+      // SE ESTIVER PARADO -> LIMPA O ANTERIOR E INICIA A CÂMERA
+      barcodeEl.textContent = 'Aguardando...';
+      statusEl.textContent = 'Abrindo câmera...';
+      placeholderEl.style.display = 'none';
 
-      starting = true;
-      startButton.disabled = true;
-      status.textContent = 'Solicitando acesso à câmera...';
-      barcode.textContent = 'Aguardando leitura...';
+      const config = {
+        fps: 15,
+        qrbox: { width: 280, height: 140 }, // Área focada para códigos de barras horizontais
+        aspectRatio: 1.5
+      };
 
       try {
-        stream = await getCameraStream();
+        await html5QrCode.start(
+          { facingMode: "environment" }, // Prioriza câmera traseira, com fallback automático para webcam
+          config,
+          (decodedText) => {
+            // Sucesso na leitura
+            barcodeEl.textContent = decodedText;
+            statusEl.textContent = 'Código lido com sucesso!';
 
-        // Tenta configurar foco contínuo se suportado
-        const track = stream.getVideoTracks()[0];
-        if (track && track.applyConstraints) {
-          try {
-            await track.applyConstraints({
-              advanced: [{ focusMode: 'continuous' }]
-            });
-          } catch (e) {
-            console.log('Foco contínuo não suportado neste dispositivo.');
-          }
-        }
-
-        status.textContent = 'Procurando códigos de barras...';
-
-        // Usa decodeFromStream para evitar conflito de controle do elemento <video>
-        controls = await reader.decodeFromStream(
-          stream,
-          video,
-          (result, error) => {
-            if (result) {
-              const code = result.getText();
-              const now = Date.now();
-
-              if (code === lastCode && now - lastReadTime < 2000) {
-                return;
-              }
-
-              lastCode = code;
-              lastReadTime = now;
-
-              barcode.textContent = code;
-              status.textContent = 'Código detectado com sucesso!';
-
-              if (navigator.vibrate) {
-                navigator.vibrate(100);
-              }
+            if (navigator.vibrate) {
+              navigator.vibrate(100);
             }
+
+            // Para a câmera automaticamente após ler o código
+            toggleScanner();
+          },
+          () => {
+            // Ignora erros de frame vazio enquanto procura o código
           }
         );
 
-        stopButton.disabled = false;
+        isScanning = true;
+        statusEl.textContent = 'Aponte para o código de barras...';
+        actionBtn.textContent = 'Parar Câmera';
+        actionBtn.classList.add('stop-mode');
 
-      } catch (error) {
-        console.error('Erro ao iniciar câmera:', error);
-        stopCamera(false); // Limpa recursos sem apagar a mensagem de erro
-        status.textContent = 'Erro: ' + (error.message || 'Permissão negada ou câmera não encontrada');
-        barcode.textContent = 'Falha ao iniciar';
+      } catch (err) {
+        console.error('Erro ao iniciar câmera:', err);
+        placeholderEl.style.display = 'block';
+        barcodeEl.textContent = '---';
+        statusEl.textContent = 'Erro: Verifique a permissão da câmera ou use HTTPS.';
+        actionBtn.textContent = 'Tentar Novamente';
+        actionBtn.classList.remove('stop-mode');
       } finally {
-        starting = false;
+        actionBtn.disabled = false;
       }
     }
 
-    function stopCamera(updateStatus = true) {
-      if (controls) {
-        controls.stop();
-        controls = null;
+    actionBtn.addEventListener('click', toggleScanner);
+
+    // Garante que a câmera desligue se o usuário sair da aba
+    window.addEventListener('pagehide', () => {
+      if (isScanning) {
+        html5QrCode.stop().catch(() => {});
       }
-
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-      }
-
-      video.srcObject = null;
-      startButton.disabled = false;
-      stopButton.disabled = true;
-
-      if (updateStatus) {
-        status.textContent = 'Câmera desligada';
-      }
-    }
-
-    function clearResult() {
-      barcode.textContent = 'Aguardando leitura...';
-      lastCode = '';
-      lastReadTime = 0;
-      status.textContent = stream
-        ? 'Procurando códigos de barras...'
-        : 'Câmera desligada';
-    }
-
-    startButton.addEventListener('click', startCamera);
-    stopButton.addEventListener('click', () => stopCamera(true));
-    clearButton.addEventListener('click', clearResult);
-
-    window.addEventListener('pagehide', () => stopCamera(true));
+    });
   </script>
 
 </body>
