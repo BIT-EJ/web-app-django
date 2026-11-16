@@ -1,380 +1,824 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Leitor de código de barras</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leitor de Código de Barras & QR Code</title>
+<meta name="theme-color" content="#212529">
+<meta name="color-scheme" content="light dark">
 <style>
-  :root { color-scheme: light dark; --bg:#f5f6f8; --card:#fff; --fg:#14171c; --muted:#6b7280; --accent:#2563eb; --ok:#15803d; --okbg:#dcfce7; --err:#b91c1c; --errbg:#fee2e2; --bd:#e5e7eb; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#0f1216; --card:#1a1f27; --fg:#eef1f5; --muted:#9aa3b0; --accent:#60a5fa; --ok:#86efac; --okbg:#14301f; --err:#fca5a5; --errbg:#3b1616; --bd:#2b323d; } }
-  * { box-sizing: border-box; }
-  [hidden] { display:none !important; }
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--fg); min-height:100vh; display:flex; justify-content:center; padding:20px; }
-  main { width:100%; max-width:480px; display:flex; flex-direction:column; gap:16px; }
-  h1 { font-size:1.3rem; margin:8px 0 0; }
-  p.sub { margin:0; color:var(--muted); font-size:.95rem; }
-  .btn { display:block; text-align:center; background:var(--accent); color:#fff; font-weight:600; font-size:1.1rem; padding:16px; border-radius:14px; cursor:pointer; border:0; width:100%; }
-  .btn:disabled { opacity:.6; cursor:default; }
-  .btn.sec { background:transparent; color:var(--accent); border:1.5px solid var(--accent); font-size:.95rem; padding:10px; }
-  input[type=file] { display:none; }
-  .card { background:var(--card); border:1px solid var(--bd); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:12px; }
-  #view { width:100%; display:block; border-radius:10px; background:#fff; touch-action:none; cursor:grab; }
-  .hint { font-size:.8rem; color:var(--muted); text-align:center; margin-top:-4px; }
-  .row { display:flex; gap:8px; }
-  .row .btn { flex:1; }
-  label.rng { display:flex; flex-direction:column; gap:4px; font-size:.9rem; }
-  label.rng span.t { display:flex; justify-content:space-between; }
-  label.rng b { font-variant-numeric: tabular-nums; }
-  input[type=range] { width:100%; accent-color:var(--accent); height:28px; }
-  #status { font-size:.95rem; color:var(--muted); }
-  .res { border-radius:14px; padding:16px; }
-  .res.ok { background:var(--okbg); color:var(--ok); }
-  .res.fail { background:var(--errbg); color:var(--err); }
-  .res .lbl { font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; opacity:.85; }
-  .res .val { font-size:1.5rem; font-weight:700; margin:4px 0 10px; font-family: ui-monospace, Menlo, Consolas, monospace; word-break:break-all; }
-  .res .fmt { font-size:.9rem; margin-bottom:10px; }
+:root{
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --accent:hsl(217.75,98.36%,52.16%);
+  --bg-body:#fff;--bg-alt:#f7f7f7;--bg:#efefef;--text:#363636;--muted:#70777f;
+  --border:#b9b8b8;--success:#16a34a;--danger:#dc2626;--dialog-bg:#fff;--highlight:#ffff99;
+  --radius:6px;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --accent:hsl(206,100%,73%);
+    --bg-body:#212529;--bg-alt:#343a40;--bg:#343a40;--text:#dbdbdb;--muted:#a9b1ba;
+    --border:#495057;--success:#3ae075;--danger:#fe5c5c;--dialog-bg:#343a40;--highlight:#fff3b0;
+  }
+}
+*,*::before,*::after{box-sizing:border-box}
+body{font-family:var(--font);max-width:64rem;margin:1.25rem auto;padding:0 .75rem;color:var(--text);background:var(--bg-body);line-height:1.5;word-wrap:break-word}
+[hidden]{display:none!important}
+a{color:var(--accent)}
+button{font:inherit;color:var(--text);border:0;border-radius:var(--radius);padding:.625rem;cursor:pointer;background:var(--bg)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.container{max-width:37.5rem;margin:0 auto}
+
+.app-actions{position:absolute;top:8px;right:8px;display:flex;align-items:center;gap:.5rem}
+.app-actions button{background:transparent;display:inline-flex;align-items:center;gap:.35rem;padding:8px}
+.app-actions .divider{width:1px;height:1.2rem;background:var(--border)}
+.app-actions .lbl{display:none}
+@media(min-width:37.5rem){.app-actions .lbl{display:inline}}
+
+header.app-header{display:flex;flex-direction:column;align-items:center;text-align:center;margin:2rem 0}
+header h1{margin:.5rem 0 0;font-size:1.5rem;font-weight:300}
+header p{margin:0;color:var(--muted);font-size:.95rem}
+@media(min-width:37.5rem){header h1{font-size:2rem}}
+
+.tabs{display:flex;border-radius:var(--radius);overflow:hidden}
+.tabs button{flex:1;display:flex;align-items:center;justify-content:center;gap:.5rem;border-radius:0;background:var(--bg)}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--bg-body)}
+.tabs button:focus-visible{outline:2px solid var(--text);outline-offset:-2px}
+
+.video-wrap{position:relative;margin-top:1rem;background:#000;border-radius:var(--radius);overflow:hidden;aspect-ratio:3/4;max-height:70vh;width:100%;touch-action:none}
+@media(min-width:37.5rem){.video-wrap{aspect-ratio:4/3}}
+video{width:100%;height:100%;object-fit:cover;display:block}
+.reticle{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+.reticle div{width:70%;height:35%;border:2px dashed rgba(255,255,255,.7);border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.15)}
+.video-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:1rem;color:#fff;font-size:.95rem}
+.zoom-badge{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:.8rem;padding:.15rem .5rem;border-radius:99px}
+.engine-badge{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:.7rem;padding:.15rem .5rem;border-radius:99px}
+
+.controls{margin-top:.75rem;display:flex;flex-direction:column;gap:.6rem}
+.zoom-row{display:flex;align-items:center;gap:.6rem}
+.zoom-row input[type=range]{flex:1}
+.zoom-presets{display:flex;gap:.4rem;flex-wrap:wrap}
+.zoom-presets button{padding:.35rem .7rem;font-size:.85rem}
+.zoom-presets button.active{background:var(--accent);color:var(--bg-body)}
+.btn-row{display:flex;gap:.5rem;flex-wrap:wrap}
+.btn-row button{flex:1;min-width:8rem}
+.btn-primary{background:var(--accent)!important;color:var(--bg-body)!important}
+.hint{font-size:.85rem;color:var(--muted);text-align:center;text-wrap:balance}
+.status{font-size:.9rem;text-align:center;min-height:1.4em}
+.status.error{color:var(--danger)}
+
+.dropzone{margin-top:1rem;min-height:17.6rem;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.75rem;padding:1rem;text-align:center;border:2px dashed var(--border);border-radius:var(--radius);background:var(--bg-alt);cursor:pointer;transition:border-color .1s,background .1s}
+.dropzone:hover,.dropzone.dragover{border-color:var(--accent);background:var(--bg)}
+.dropzone img{max-width:200px;max-height:200px;height:auto}
+.dropzone .fname{font-size:.9rem}
+
+.results{margin-top:1rem;background:var(--bg-alt);border:1px solid var(--border);border-radius:var(--radius);max-height:min(25rem,50dvh);overflow-y:auto}
+.results:empty{display:none}
+.result{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.5rem;border-bottom:1px solid var(--border)}
+.result:last-child{border-bottom:0}
+.result.new{animation:hl .4s ease-out}
+@keyframes hl{from{background:var(--highlight)}to{background:transparent}}
+.result .val{word-break:break-word;white-space:pre-line}
+.result .time{font-size:.8rem;color:var(--muted);margin-top:.25rem}
+.result .acts{display:flex;gap:.5rem}
+.icon-btn{background:transparent;padding:.25rem;line-height:1;display:inline-flex;align-items:center;justify-content:center;gap:.25rem;font-size:.9rem}
+.icon-btn.ok{color:var(--success)}
+.icon-btn.err{color:var(--danger)}
+
+footer.app-footer{margin-top:1.5rem;border-top:1px solid var(--border);padding-top:10px;color:var(--muted);text-align:center;font-size:.85rem}
+
+dialog{border:0;border-radius:var(--radius);background:var(--dialog-bg);color:var(--text);padding:0;max-width:min(24rem,92vw);width:100%;max-height:85vh;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+dialog::backdrop{backdrop-filter:blur(4px);background:rgba(0,0,0,.35)}
+dialog .dhead{display:flex;justify-content:space-between;align-items:center;padding:.75rem;position:sticky;top:0;background:var(--dialog-bg);z-index:1}
+dialog .dhead h2{margin:0;font-size:1.1rem;font-weight:500}
+dialog .dbody{font-size:.875rem;padding-bottom:.5rem}
+.history ul{list-style:none;margin:0;padding:0}
+.history li{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.5rem .75rem;border-bottom:1px solid var(--border)}
+.history li:last-child{border-bottom:0}
+.history li .t{word-break:break-all;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.history .actions{display:flex;gap:.25rem}
+.history .foot{padding:.75rem;position:sticky;bottom:0;background:var(--dialog-bg)}
+.history .foot button{width:100%;background:var(--danger);color:var(--bg-body)}
+.settings-form{padding-inline:.75rem}
+fieldset{border:0;padding:0;margin:0 0 1rem}
+legend{font-weight:500;margin-bottom:.25rem}
+.desc{font-size:.75rem;color:var(--muted);margin:0 0 .25rem}
+.settings-form ul{list-style:none;margin:0;padding:0}
+.settings-form li{padding:.25rem 0}
+.settings-form label{display:flex;gap:.5rem;cursor:pointer}
+.settings-form input[type=checkbox]{width:1rem;height:1rem;min-width:1rem;margin-top:.2rem}
+.formats{display:grid;grid-template-columns:repeat(auto-fill,minmax(6.25rem,1fr));column-gap:.75rem;row-gap:.25rem}
+
+.toasts{position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);display:flex;flex-direction:column;gap:.5rem;z-index:100;width:min(92vw,28rem)}
+.toast{background:var(--bg-alt);color:var(--text);border:1px solid var(--border);border-left:4px solid var(--accent);padding:.6rem .8rem;border-radius:var(--radius);font-size:.9rem;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.toast.danger{border-left-color:var(--danger)}
+.toast.success{border-left-color:var(--success)}
 </style>
 </head>
 <body>
-<main>
-  <h1>Leitor de código de barras</h1>
-  <p class="sub">Tire a foto, ajuste o enquadramento (girar e dar zoom) até o código ficar reto e grande, e toque em Ler código.</p>
+<noscript><div style="padding:1rem;text-align:center;border:1px solid var(--border)">É necessário JavaScript para usar este site.</div></noscript>
 
-  <label class="btn" for="cam">📷 Tirar foto</label>
-  <input id="cam" type="file" accept="image/*" capture="environment">
+<div class="app-actions" id="appActions">
+  <button id="historyBtn" aria-label="Histórico">
+    <svg width="1.125em" height="1.125em" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a7 7 0 1 0 4.95 11.95l.707.707A8.001 8.001 0 1 1 8 0z"/><path d="M7.5 3a.5.5 0 0 1 .5.5v5.21l3.248 1.856a.5.5 0 0 1-.496.868l-3.5-2A.5.5 0 0 1 7 9V3.5a.5.5 0 0 1 .5-.5"/></svg>
+    <span class="lbl">Histórico</span>
+  </button>
+  <span class="divider"></span>
+  <button id="settingsBtn" aria-label="Configurações">
+    <svg width="1.125em" height="1.125em" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M11.5 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M9.05 3a2.5 2.5 0 0 1 4.9 0H16v1h-2.05a2.5 2.5 0 0 1-4.9 0H0V3zM4.5 7a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M2.05 8a2.5 2.5 0 0 1 4.9 0H16v1H6.95a2.5 2.5 0 0 1-4.9 0H0V8zm9.45 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3m-2.45 1a2.5 2.5 0 0 1 4.9 0H16v1h-2.05a2.5 2.5 0 0 1-4.9 0H0v-1z"/></svg>
+    <span class="lbl">Configurações</span>
+  </button>
+</div>
 
-  <div class="card" id="editor" hidden>
-    <canvas id="view"></canvas>
-    <div class="hint">Arraste para mover · pinça ou scroll para zoom · alinhe as barras com as linhas-guia</div>
-    <div class="row">
-      <button class="btn sec" id="rotL" type="button">↺ 90°</button>
-      <button class="btn sec" id="rotR" type="button">↻ 90°</button>
-      <button class="btn sec" id="reset" type="button">Reiniciar</button>
+<header class="app-header">
+  <svg viewBox="0 0 512 512" width="5em" height="5em" aria-hidden="true">
+    <g fill="var(--accent)"><path d="M93.867 51.2H8.533C3.814 51.2 0 55.014 0 59.733v85.333c0 4.719 3.814 8.533 8.533 8.533s8.533-3.814 8.533-8.533v-76.8h76.8c4.719 0 8.533-3.814 8.533-8.533s-3.814-8.533-8.533-8.533zM503.467 51.2h-85.333c-4.719 0-8.533 3.814-8.533 8.533s3.814 8.533 8.533 8.533h76.8v76.8c0 4.719 3.814 8.533 8.533 8.533s8.533-3.814 8.533-8.533V59.733c0-4.719-3.814-8.533-8.533-8.533zM503.467 358.4c-4.719 0-8.533 3.814-8.533 8.533v76.8h-76.8c-4.719 0-8.533 3.814-8.533 8.533s3.814 8.533 8.533 8.533h85.333c4.719 0 8.533-3.814 8.533-8.533v-85.333c0-4.719-3.814-8.533-8.533-8.533zM93.867 443.733h-76.8v-76.8c0-4.719-3.814-8.533-8.533-8.533S0 362.214 0 366.933v85.333c0 4.719 3.814 8.533 8.533 8.533h85.333c4.719 0 8.533-3.814 8.533-8.533s-3.814-8.533-8.533-8.533zM503.467 247.467H8.533C3.814 247.467 0 251.281 0 256s3.814 8.533 8.533 8.533h494.933c4.719 0 8.533-3.814 8.533-8.533s-3.814-8.533-8.533-8.533z"/></g>
+    <g fill="currentColor">
+      <rect x="110" y="119" width="17" height="110" rx="8"/><rect x="144" y="119" width="17" height="110" rx="8"/><rect x="178" y="119" width="17" height="110" rx="8"/><rect x="212" y="119" width="17" height="110" rx="8"/><rect x="247" y="119" width="17" height="110" rx="8"/><rect x="281" y="119" width="17" height="110" rx="8"/><rect x="315" y="119" width="17" height="110" rx="8"/><rect x="349" y="119" width="17" height="110" rx="8"/><rect x="383" y="119" width="17" height="110" rx="8"/>
+      <rect x="110" y="281" width="17" height="128" rx="8"/><rect x="144" y="281" width="17" height="110" rx="8"/><rect x="178" y="281" width="17" height="110" rx="8"/><rect x="212" y="281" width="17" height="110" rx="8"/><rect x="247" y="281" width="17" height="110" rx="8"/><rect x="281" y="281" width="17" height="110" rx="8"/><rect x="315" y="281" width="17" height="110" rx="8"/><rect x="349" y="281" width="17" height="110" rx="8"/><rect x="383" y="281" width="17" height="128" rx="8"/>
+    </g>
+  </svg>
+  <h1>Leitor de Código de Barras & QR Code</h1>
+  <p>Escaneie com a câmera (de perto ou de longe) ou por imagem</p>
+</header>
+
+<div class="container" id="mainContainer">
+  <div class="tabs" role="tablist">
+    <button role="tab" id="cameraTab" aria-selected="true" aria-controls="cameraPanel">
+      <svg width="1.4em" height="1.4em" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true"><path d="M0 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H9.269c.144.162.33.324.531.475a6.785 6.785 0 0 0 .907.57l.014.006.003.002A.5.5 0 0 1 10.5 13h-5a.5.5 0 0 1-.224-.947l.003-.002.014-.007a4.473 4.473 0 0 0 .268-.148 6.75 6.75 0 0 0 .639-.421c.2-.15.387-.313.531-.475H2a2 2 0 0 1-2-2V6Zm2-1a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H2Z"/><path d="M8 6.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm-2 1a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z"/></svg>
+      <span>Usar câmera</span>
+    </button>
+    <button role="tab" id="fileTab" aria-selected="false" aria-controls="filePanel">
+      <svg width="1.125em" height="1.125em" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/><path d="M2.002 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2zm12 1a1 1 0 0 1 1 1v6.5l-3.777-1.947a.5.5 0 0 0-.577.093l-3.71 3.71-2.66-1.772a.5.5 0 0 0-.63.062L1.002 12V3a1 1 0 0 1 1-1z"/></svg>
+      <span>Usar imagem</span>
+    </button>
+  </div>
+
+  <!-- Painel da câmera -->
+  <section id="cameraPanel" role="tabpanel">
+    <div class="video-wrap" id="videoWrap">
+      <video id="video" playsinline muted autoplay></video>
+      <div class="reticle"><div></div></div>
+      <div class="video-msg" id="videoMsg">Toque em “Iniciar câmera”.</div>
+      <span class="zoom-badge" id="zoomBadge" hidden></span>
+      <span class="engine-badge" id="engineBadge" hidden></span>
     </div>
-    <label class="rng"><span class="t">Inclinação <b id="fineLbl">0°</b></span>
-      <input id="fine" type="range" min="-45" max="45" step="0.5" value="0"></label>
-    <label class="rng"><span class="t">Zoom <b id="zoomLbl">100%</b></span>
-      <input id="zoom" type="range" min="-1.6" max="2.48" step="0.01" value="0"></label>
-    <button class="btn" id="read" type="button">🔍 Ler código</button>
-    <div id="status">Aguardando foto…</div>
+
+    <div class="controls">
+      <div class="zoom-row" id="zoomRow" hidden>
+        <span aria-hidden="true">🔍</span>
+        <input type="range" id="zoomSlider" aria-label="Zoom" min="1" max="5" step="0.1" value="1">
+      </div>
+      <div class="zoom-presets" id="zoomPresets" hidden></div>
+      <div class="btn-row">
+        <button id="startBtn" class="btn-primary">Iniciar câmera</button>
+        <button id="hdBtn" disabled title="Tira uma foto na resolução máxima da câmera e a analisa em partes">📷 Foto HD (longe)</button>
+        <button id="torchBtn" hidden>🔦 Lanterna</button>
+      </div>
+      <div class="status" id="status" aria-live="polite"></div>
+      <div class="hint">Para códigos distantes: use o zoom (ou deixe o zoom automático ligado nas configurações), mantenha o celular firme e boa iluminação. Se não ler, use “Foto HD”.</div>
+    </div>
+    <div class="results" id="cameraResults"></div>
+  </section>
+
+  <!-- Painel de imagem -->
+  <section id="filePanel" role="tabpanel" hidden>
+    <label class="dropzone" id="dropzone">
+      <span id="dropInstructions" style="display:flex;flex-direction:column;align-items:center;gap:.75rem">
+        <svg width="3em" height="3em" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/><path d="M2.002 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2zm12 1a1 1 0 0 1 1 1v6.5l-3.777-1.947a.5.5 0 0 0-.577.093l-3.71 3.71-2.66-1.772a.5.5 0 0 0-.63.062L1.002 12V3a1 1 0 0 1 1-1z"/></svg>
+        Clique ou solte uma imagem para escanear
+      </span>
+      <div id="preview" hidden>
+        <img id="previewImg" alt="Pré-visualização da imagem">
+        <div class="fname" id="previewName"></div>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+    </label>
+    <div class="status" id="fileStatus" aria-live="polite"></div>
+    <div class="results" id="fileResults"></div>
+  </section>
+</div>
+
+<footer class="app-footer">
+  <p>Baseado em <a href="https://github.com/georapbox/barcode-scanner" target="_blank" rel="noreferrer noopener">georapbox/barcode-scanner</a> (Licença MIT) — versão em arquivo único com leitura à distância.</p>
+</footer>
+
+<dialog id="historyDialog" class="history" aria-labelledby="hTitle">
+  <div class="dhead"><h2 id="hTitle">Histórico</h2><button class="icon-btn" data-close aria-label="Fechar">✕</button></div>
+  <div class="dbody">
+    <ul id="historyList"></ul>
+    <div class="foot">
+      <div id="historyEmpty">Não há itens salvos no histórico.</div>
+      <button id="emptyHistoryBtn" type="button">Limpar histórico</button>
+    </div>
   </div>
+</dialog>
 
-  <div id="ok" class="res ok" hidden>
-    <div class="lbl">Leitura</div>
-    <div class="val" id="val"></div>
-    <div class="fmt" id="fmt"></div>
-    <button class="btn sec" id="copy" type="button">Copiar</button>
+<dialog id="settingsDialog" aria-labelledby="sTitle">
+  <div class="dhead"><h2 id="sTitle">Configurações</h2><button class="icon-btn" data-close aria-label="Fechar">✕</button></div>
+  <div class="dbody">
+    <form id="settingsForm" class="settings-form" autocomplete="off">
+      <fieldset>
+        <legend>Quando um código for detectado...</legend>
+        <ul>
+          <li><label><input type="checkbox" name="g" value="openWebPage"> Abrir páginas web automaticamente</label></li>
+          <li><label><input type="checkbox" name="g" value="openWebPageSameTab"> Abrir páginas na mesma aba</label></li>
+          <li><label><input type="checkbox" name="g" value="addToHistory"> Adicionar ao histórico</label></li>
+        </ul>
+      </fieldset>
+      <fieldset>
+        <legend>Efeitos</legend>
+        <p class="desc">Alguns efeitos podem não funcionar em todos os dispositivos.</p>
+        <ul>
+          <li><label><input type="checkbox" name="g" value="beep"> Beep</label></li>
+          <li><label><input type="checkbox" name="g" value="vibrate"> Vibrar</label></li>
+        </ul>
+      </fieldset>
+      <fieldset>
+        <legend>Leitura à distância</legend>
+        <ul>
+          <li><label><input type="checkbox" name="g" value="autoZoom"> Zoom automático (varre níveis de zoom se não achar nada)</label></li>
+          <li><label><input type="checkbox" name="g" value="forceZxing"> Forçar decodificador ZXing (mais lento, às vezes mais robusto)</label></li>
+        </ul>
+      </fieldset>
+      <fieldset>
+        <legend>Formatos suportados</legend>
+        <p class="desc">Se nenhum estiver marcado, todos os formatos serão aceitos.</p>
+        <ul id="formatsList" class="formats"></ul>
+      </fieldset>
+    </form>
   </div>
+</dialog>
 
-  <div id="fail" class="res fail" hidden>
-    <strong>Falha ao ler o código de barras.</strong><br>
-    <span style="font-size:.9rem">Ajuste a inclinação e o zoom para o código ficar reto, nítido e ocupando boa parte do quadro, depois toque em Ler código de novo. Se persistir, tire outra foto com mais luz e sem reflexo.</span>
-  </div>
-</main>
+<div class="toasts" id="toasts" aria-live="assertive"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
-<script>
-(function () {
-  const $ = id => document.getElementById(id);
-  const input = $('cam'), view = $('view'), statusEl = $('status'), readBtn = $('read');
-  const editor = $('editor'), okBox = $('ok'), failBox = $('fail');
-  const tick = () => new Promise(r => setTimeout(r, 0));
-  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-  const ASPECT = 0.75; // altura = 75% da largura
+<script type="module">
+/* ====================== Utilidades ====================== */
+const $ = (s, r = document) => r.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const SETTINGS_KEY = 'barcode-scanner/settings';
+const HISTORY_KEY = 'barcode-scanner/history';
+const PONYFILL_URL = 'https://cdn.jsdelivr.net/npm/barcode-detector@3/dist/es/ponyfill.min.js';
 
-  /* ---------- Editor: girar, mover e dar zoom ---------- */
-  const S = { img: null, url: null, rot90: 0, fine: 0, zoom: 1, px: 0, py: 0, fit: 1 };
-  const total = () => S.rot90 * 90 + S.fine;
-  const VW = () => view.clientWidth, VH = () => VW() * ASPECT;
+let settings = { addToHistory: true, beep: true, vibrate: true, autoZoom: true, ...LS.get(SETTINGS_KEY, {}) };
+const dtf = new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'medium' });
 
-  function render(ctx, w, h, k) {
-    ctx.save();
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, w * k, h * k);
-    ctx.translate(w * k / 2 + S.px * k, h * k / 2 + S.py * k);
-    ctx.rotate(total() * Math.PI / 180);
-    const sc = S.fit * S.zoom * k;
-    ctx.scale(sc, sc);
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(S.img, -S.img.naturalWidth / 2, -S.img.naturalHeight / 2);
-    ctx.restore();
+function toast(msg, variant = 'info', ms = 3500) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + variant;
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  if (ms !== Infinity) setTimeout(() => el.remove(), ms);
+  return el;
+}
+function httpUrl(value) {
+  try { const u = new URL(value); return /^https?:$/.test(u.protocol) ? u : null; } catch { return null; }
+}
+
+/* ====================== Efeitos ====================== */
+let audioCtx = null;
+function beep({ duration = 200, frequency = 860, volume = 0.05, type = 'square' } = {}) {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    g.gain.value = volume; o.frequency.value = frequency; o.type = type;
+    o.start(); o.stop(audioCtx.currentTime + duration / 1000);
+  } catch {}
+}
+let lastFx = 0;
+function triggerEffects(success = true) {
+  const now = Date.now();
+  if (now - lastFx < 1000) return;
+  lastFx = now;
+  if (settings.beep) beep(success ? {} : { duration: 300, frequency: 200, volume: 0.05, type: 'sawtooth' });
+  if (settings.vibrate && navigator.vibrate) navigator.vibrate(success ? 100 : 200);
+}
+
+/* ====================== Detector ====================== */
+let Detector = null, detector = null, supportedFormats = [], usingNative = false;
+
+async function loadDetector() {
+  if (!settings.forceZxing && 'BarcodeDetector' in window) {
+    try {
+      const f = await window.BarcodeDetector.getSupportedFormats();
+      if (f && f.length) { Detector = window.BarcodeDetector; supportedFormats = f.filter(x => x !== 'unknown'); usingNative = true; return; }
+    } catch {}
   }
+  const mod = await import(PONYFILL_URL);
+  Detector = mod.BarcodeDetector;
+  supportedFormats = (await Detector.getSupportedFormats()).filter(x => x !== 'unknown');
+  usingNative = false;
+}
+function createDetector() {
+  const sel = (settings.formats || []).filter(f => supportedFormats.includes(f));
+  detector = new Detector({ formats: sel.length ? sel : supportedFormats });
+  const b = $('#engineBadge');
+  b.hidden = false;
+  b.textContent = usingNative ? 'Detector nativo' : 'ZXing (WASM)';
+}
 
-  function draw() {
-    if (!S.img) return;
-    const w = VW(), h = Math.round(VH()), dpr = window.devicePixelRatio || 1;
-    if (view.width !== Math.round(w * dpr) || view.height !== Math.round(h * dpr)) {
-      view.width = Math.round(w * dpr); view.height = Math.round(h * dpr);
-      view.style.height = h + 'px';
-    }
-    const ctx = view.getContext('2d');
-    render(ctx, w, h, dpr);
-    // linhas-guia
-    ctx.save();
-    ctx.scale(dpr, dpr);
-    ctx.strokeStyle = 'rgba(220,38,38,.55)'; ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 1; i < 4; i++) { ctx.moveTo(w * i / 4, 0); ctx.lineTo(w * i / 4, h); }
-    for (let i = 1; i < 4; i++) { ctx.moveTo(0, h * i / 4); ctx.lineTo(w, h * i / 4); }
-    ctx.stroke();
-    ctx.restore();
+/* ====================== Passes de leitura (longe) ====================== */
+/* Cada "pass" recorta uma região do frame (em resolução total) e a amplia/reduz
+   para um tamanho bom para o decodificador. Códigos distantes ocupam poucos pixels:
+   recortar + ampliar a região e varrer em blocos aumenta muito a chance de leitura. */
+const FULL = { x: .5, y: .5, f: 1 };
+const C60 = { x: .5, y: .5, f: .6 };
+const C35 = { x: .5, y: .5, f: .35 };
+const C25 = { x: .5, y: .5, f: .25 };
+const CONTRAST = 'grayscale(1) contrast(1.6)';
+const LIVE_PASSES = [
+  FULL, C60, C35, { ...FULL, filter: CONTRAST },
+  { x: .3, y: .3, f: .6 }, { x: .7, y: .3, f: .6 }, { x: .3, y: .7, f: .6 }, { x: .7, y: .7, f: .6 },
+  { ...C35, filter: CONTRAST }
+];
+const GRID = [];
+for (const y of [.25, .5, .75]) for (const x of [.25, .5, .75]) GRID.push({ x, y, f: .5 });
+const ALL_PASSES = [FULL, C60, C35, C25, ...GRID, { ...FULL, filter: CONTRAST }, { ...C35, filter: CONTRAST }, { ...C60, filter: CONTRAST }];
+
+const work = document.createElement('canvas');
+const wctx = work.getContext('2d', { willReadFrequently: true });
+
+function drawPass(src, sw, sh, p) {
+  const cw = sw * p.f, ch = sh * p.f;
+  const sx = Math.min(Math.max(p.x * sw - cw / 2, 0), sw - cw);
+  const sy = Math.min(Math.max(p.y * sh - ch / 2, 0), sh - ch);
+  const MAX = 2048, MIN = 900;
+  const longest = Math.max(cw, ch);
+  let scale = 1;
+  if (longest > MAX) scale = MAX / longest;
+  else if (longest < MIN) scale = Math.min(MIN / longest, 3);
+  work.width = Math.max(1, Math.round(cw * scale));
+  work.height = Math.max(1, Math.round(ch * scale));
+  wctx.filter = p.filter || 'none';
+  wctx.imageSmoothingEnabled = true;
+  wctx.imageSmoothingQuality = 'high';
+  wctx.drawImage(src, sx, sy, cw, ch, 0, 0, work.width, work.height);
+  wctx.filter = 'none';
+}
+
+async function scanSource(src, sw, sh, passes, onProgress) {
+  for (let i = 0; i < passes.length; i++) {
+    onProgress?.(i + 1, passes.length);
+    drawPass(src, sw, sh, passes[i]);
+    try {
+      const res = await detector.detect(work);
+      if (res.length && res[0].rawValue) return res[0].rawValue;
+    } catch (e) { console.warn(e); }
+    await sleep(0);
   }
+  return '';
+}
 
-  function syncUI() {
-    $('fine').value = S.fine; $('fineLbl').textContent = S.fine.toFixed(1).replace('.0', '') + '°';
-    $('zoom').value = Math.log(S.zoom); $('zoomLbl').textContent = Math.round(S.zoom * 100) + '%';
+/* ====================== Resultados / histórico ====================== */
+function createResult(container, value) {
+  if (!container || !value) return;
+  [...container.querySelectorAll('.result')].find(el => el.dataset.value === value)?.remove();
+
+  const row = document.createElement('div');
+  row.className = 'result new';
+  row.dataset.value = value;
+  row.setAttribute('role', 'alert');
+
+  const content = document.createElement('div');
+  const url = httpUrl(value);
+  let valEl;
+  if (url) {
+    valEl = document.createElement('a');
+    valEl.href = url.href;
+    if (!settings.openWebPageSameTab) { valEl.target = '_blank'; valEl.rel = 'noreferrer noopener'; }
+  } else valEl = document.createElement('span');
+  valEl.className = 'val';
+  valEl.textContent = value;
+  const time = document.createElement('div');
+  time.className = 'time';
+  time.textContent = dtf.format(new Date());
+  content.append(valEl, time);
+
+  const acts = document.createElement('div');
+  acts.className = 'acts';
+  acts.appendChild(copyButton(value));
+  if (navigator.share) {
+    const sb = document.createElement('button');
+    sb.className = 'icon-btn'; sb.type = 'button'; sb.setAttribute('aria-label', 'Compartilhar resultado');
+    sb.innerHTML = '<svg width="1em" height="1em" fill="currentColor" viewBox="0 0 16 16"><path d="M13.5 1a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM11 2.5a2.5 2.5 0 1 1 .603 1.628l-6.718 3.12a2.499 2.499 0 0 1 0 1.504l6.718 3.12a2.5 2.5 0 1 1-.488.876l-6.718-3.12a2.5 2.5 0 1 1 0-3.256l6.718-3.12A2.5 2.5 0 0 1 11 2.5zm-8.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm11 5.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>';
+    sb.onclick = () => navigator.share({ text: value }).catch(() => {});
+    acts.appendChild(sb);
   }
+  row.append(content, acts);
+  container.insertBefore(row, container.firstElementChild);
+  container.scrollTop = 0;
 
-  function refit() {
-    const w = VW(), h = VH(), a = total() * Math.PI / 180;
-    const iw = S.img.naturalWidth, ih = S.img.naturalHeight;
-    const bw = Math.abs(iw * Math.cos(a)) + Math.abs(ih * Math.sin(a));
-    const bh = Math.abs(iw * Math.sin(a)) + Math.abs(ih * Math.cos(a));
-    S.fit = Math.min(w / bw, h / bh);
-    S.zoom = 1; S.px = 0; S.py = 0;
-    syncUI(); draw();
+  if (url) {
+    if (settings.openWebPage) valEl.click();
   }
-
-  function rotatePan(deg) {
-    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
-    const nx = S.px * c - S.py * s, ny = S.px * s + S.py * c;
-    S.px = nx; S.py = ny;
-  }
-
-  function zoomAt(f, mx, my) {
-    const nz = clamp(S.zoom * f, 0.2, 12); f = nz / S.zoom;
-    S.px = mx - (mx - S.px) * f; S.py = my - (my - S.py) * f; S.zoom = nz;
-  }
-
-  $('rotL').onclick = () => { S.rot90 = (S.rot90 + 3) % 4; refit(); };
-  $('rotR').onclick = () => { S.rot90 = (S.rot90 + 1) % 4; refit(); };
-  $('reset').onclick = () => { S.rot90 = 0; S.fine = 0; refit(); };
-  $('fine').oninput = e => {
-    const v = parseFloat(e.target.value); rotatePan(v - S.fine); S.fine = v; syncUI(); draw();
+}
+function copyButton(value) {
+  const b = document.createElement('button');
+  b.className = 'icon-btn'; b.type = 'button'; b.setAttribute('aria-label', 'Copiar para a área de transferência');
+  const icon = '<svg width="1em" height="1em" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>';
+  b.innerHTML = icon;
+  b.onclick = async () => {
+    try { await navigator.clipboard.writeText(value); b.classList.add('ok'); b.textContent = '✓'; }
+    catch { b.classList.add('err'); b.textContent = '✕'; }
+    setTimeout(() => { b.className = 'icon-btn'; b.innerHTML = icon; }, 1500);
   };
-  $('zoom').oninput = e => {
-    zoomAt(Math.exp(parseFloat(e.target.value)) / S.zoom, 0, 0); syncUI(); draw();
-  };
+  return b;
+}
 
-  const ptrs = new Map();
-  view.addEventListener('pointerdown', e => {
-    view.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+function getHistory() { const h = LS.get(HISTORY_KEY, []); return Array.isArray(h) ? h : []; }
+function renderHistory() {
+  const list = $('#historyList');
+  const data = [...getHistory()].reverse();
+  list.replaceChildren();
+  data.forEach(item => {
+    const li = document.createElement('li');
+    const url = httpUrl(item);
+    let t;
+    if (url) { t = document.createElement('a'); t.href = url.href; t.target = '_blank'; t.rel = 'noreferrer noopener'; }
+    else t = document.createElement('span');
+    t.className = 't'; t.textContent = item;
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    actions.appendChild(copyButton(item));
+    const del = document.createElement('button');
+    del.className = 'icon-btn'; del.type = 'button'; del.style.color = 'var(--danger)';
+    del.setAttribute('aria-label', 'Remover do histórico'); del.textContent = '🗑';
+    del.onclick = () => {
+      if (confirm(`Excluir o item do histórico?\n${item}`)) {
+        LS.set(HISTORY_KEY, getHistory().filter(h => h !== item));
+        renderHistory();
+        toast('Removido do histórico', 'success');
+      }
+    };
+    actions.appendChild(del);
+    li.append(t, actions);
+    list.appendChild(li);
   });
-  view.addEventListener('pointermove', e => {
-    const prev = ptrs.get(e.pointerId); if (!prev) return;
-    const cur = { x: e.clientX, y: e.clientY };
-    if (ptrs.size === 1) {
-      S.px += cur.x - prev.x; S.py += cur.y - prev.y;
-    } else if (ptrs.size === 2) {
-      const other = [...ptrs.entries()].find(([id]) => id !== e.pointerId)[1];
-      const r = view.getBoundingClientRect();
-      const mx = (cur.x + other.x) / 2 - r.left - r.width / 2, my = (cur.y + other.y) / 2 - r.top - r.height / 2;
-      const pmx = (prev.x + other.x) / 2 - r.left - r.width / 2, pmy = (prev.y + other.y) / 2 - r.top - r.height / 2;
-      S.px += mx - pmx; S.py += my - pmy;
-      const d0 = Math.hypot(prev.x - other.x, prev.y - other.y), d1 = Math.hypot(cur.x - other.x, cur.y - other.y);
-      if (d0 > 0) zoomAt(d1 / d0, mx, my);
-    }
-    ptrs.set(e.pointerId, cur); syncUI(); draw();
-  });
-  const endPtr = e => ptrs.delete(e.pointerId);
-  view.addEventListener('pointerup', endPtr);
-  view.addEventListener('pointercancel', endPtr);
-  view.addEventListener('wheel', e => {
-    e.preventDefault();
-    const r = view.getBoundingClientRect();
-    zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2);
-    syncUI(); draw();
-  }, { passive: false });
-  window.addEventListener('resize', () => { if (S.img) refit(); });
+  const empty = data.length === 0;
+  $('#historyEmpty').hidden = !empty;
+  $('#emptyHistoryBtn').hidden = empty;
+}
+function addToHistory(value) {
+  const h = getHistory();
+  if (h.includes(value)) return;
+  h.push(value);
+  LS.set(HISTORY_KEY, h);
+  renderHistory();
+}
 
-  /* ---------- Detectores ---------- */
-  const NATIVE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','codabar','qr_code','data_matrix','pdf417','aztec'];
-  let nativeDetector = null;
-  async function getNative() {
-    if (nativeDetector !== null) return nativeDetector;
-    nativeDetector = false;
+function onDetected(value, source) {
+  createResult(source === 'camera' ? $('#cameraResults') : $('#fileResults'), value);
+  if (settings.addToHistory) addToHistory(value);
+  triggerEffects(true);
+}
+
+/* ====================== Câmera ====================== */
+const video = $('#video');
+let stream = null, track = null, scanning = false, loopId = 0, passIdx = 0;
+let zoomCaps = null, zoomLevels = [], currentZoom = 1;
+let lastHit = 0, lastHitValue = '', lastZoomChange = 0, lastManualZoom = 0, autoZoomTimer = null;
+let torchOn = false;
+
+function setStatus(msg, kind = '') {
+  const s = $('#status'); s.textContent = msg; s.className = 'status ' + kind;
+}
+function setVideoMsg(msg) {
+  const m = $('#videoMsg'); m.textContent = msg || ''; m.hidden = !msg;
+}
+
+async function startCamera() {
+  stopCamera();
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setVideoMsg('Câmera indisponível. Abra a página por HTTPS ou localhost.');
+    setStatus('Câmera indisponível neste contexto.', 'error');
+    return;
+  }
+  setVideoMsg('Abrindo câmera…');
+  try {
     try {
-      if ('BarcodeDetector' in window) {
-        const sup = await BarcodeDetector.getSupportedFormats();
-        const fmts = NATIVE_FORMATS.filter(f => sup.includes(f));
-        if (fmts.length) nativeDetector = new BarcodeDetector({ formats: fmts });
-      }
-    } catch (e) { nativeDetector = false; }
-    return nativeDetector;
-  }
-
-  let zxReader = null;
-  function getZX() {
-    if (zxReader !== null) return zxReader;
-    zxReader = false;
-    if (window.ZXing) {
-      const Z = window.ZXing, hints = new Map();
-      hints.set(Z.DecodeHintType.TRY_HARDER, true);
-      hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [
-        Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E,
-        Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.CODE_93, Z.BarcodeFormat.ITF,
-        Z.BarcodeFormat.CODABAR, Z.BarcodeFormat.QR_CODE, Z.BarcodeFormat.DATA_MATRIX,
-        Z.BarcodeFormat.PDF_417, Z.BarcodeFormat.AZTEC
-      ]);
-      zxReader = new Z.MultiFormatReader();
-      zxReader.setHints(hints);
-    }
-    return zxReader;
-  }
-
-  function zxDecode(canvas) {
-    const Z = window.ZXing, reader = getZX();
-    if (!reader) return null;
-    const lum = new Z.HTMLCanvasElementLuminanceSource(canvas);
-    for (const Bin of [Z.HybridBinarizer, Z.GlobalHistogramBinarizer]) {
-      try {
-        const r = reader.decode(new Z.BinaryBitmap(new Bin(lum)));
-        return { text: r.getText(), format: Z.BarcodeFormat[r.getBarcodeFormat()] };
-      } catch (e) { /* não achou nessa variante */ }
-    }
-    return null;
-  }
-
-  // Variante: escala, recorte central, rotação extra de 90° e filtro
-  function makeCanvas(src, maxSide, crop, rot, filter) {
-    const sw = src.width, sh = src.height;
-    const cw = Math.round(sw * crop), ch = Math.round(sh * crop);
-    const cx = Math.round((sw - cw) / 2), cy = Math.round((sh - ch) / 2);
-    const k = Math.min(1, maxSide / Math.max(cw, ch));
-    const w = Math.max(1, Math.round(cw * k)), h = Math.max(1, Math.round(ch * k));
-    const c = document.createElement('canvas');
-    const ctx = c.getContext('2d', { willReadFrequently: true });
-    if (rot === 90) { c.width = h; c.height = w; ctx.translate(h, 0); ctx.rotate(Math.PI / 2); }
-    else { c.width = w; c.height = h; }
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(src, cx, cy, cw, ch, 0, 0, w, h);
-    if (filter !== 'none') applyFilter(c, filter);
-    return c;
-  }
-
-  function applyFilter(c, filter) {
-    const ctx = c.getContext('2d', { willReadFrequently: true });
-    const id = ctx.getImageData(0, 0, c.width, c.height), d = id.data, n = d.length / 4;
-    const g = new Uint8ClampedArray(n), hist = new Uint32Array(256);
-    for (let i = 0; i < n; i++) { const v = (d[i*4]*0.299 + d[i*4+1]*0.587 + d[i*4+2]*0.114) | 0; g[i] = v; hist[v]++; }
-    if (filter === 'contrast') {
-      let acc = 0, lo = 0, hi = 255;
-      for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= n * 0.02) { lo = i; break; } }
-      acc = 0;
-      for (let i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= n * 0.02) { hi = i; break; } }
-      const span = Math.max(1, hi - lo);
-      for (let i = 0; i < n; i++) { const v = clamp(((g[i] - lo) * 255 / span) | 0, 0, 255); d[i*4] = d[i*4+1] = d[i*4+2] = v; }
-    } else { // otsu
-      let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
-      let wB = 0, sB = 0, best = 0, th = 128;
-      for (let t = 0; t < 256; t++) {
-        wB += hist[t]; if (!wB) continue;
-        const wF = n - wB; if (!wF) break;
-        sB += t * hist[t];
-        const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF);
-        if (v > best) { best = v; th = t; }
-      }
-      for (let i = 0; i < n; i++) { const v = g[i] > th ? 255 : 0; d[i*4] = d[i*4+1] = d[i*4+2] = v; }
-    }
-    ctx.putImageData(id, 0, 0);
-  }
-
-  async function decodeSource(src) {
-    const native = await getNative();
-    const scales = [1600, 1000, 2400, 700];
-    const filters = ['none', 'contrast', 'otsu'];
-    const crops = [1, 0.7];
-    const rots = [0, 90];
-    const totalTries = scales.length * filters.length * crops.length * rots.length;
-    let i = 0;
-    for (const s of scales) for (const f of filters) for (const cr of crops) for (const rot of rots) {
-      i++;
-      statusEl.textContent = 'Lendo… tentativa ' + i + ' de ' + totalTries;
-      await tick();
-      const c = makeCanvas(src, s, cr, rot, f);
-      if (native) {
-        try {
-          const res = await native.detect(c);
-          if (res && res.length) return { text: res[0].rawValue, format: String(res[0].format).toUpperCase(), engine: 'nativo' };
-        } catch (e) {}
-      }
-      const z = zxDecode(c);
-      if (z) return { text: z.text, format: z.format, engine: 'ZXing' };
-    }
-    return null;
-  }
-
-  // Renderiza o quadro ajustado pelo usuário em alta resolução
-  function renderOutput() {
-    const w = VW(), h = VH();
-    const k = Math.min(2800 / w, Math.max(1 / (S.fit * S.zoom), 600 / w));
-    const c = document.createElement('canvas');
-    c.width = Math.round(w * k); c.height = Math.round(h * k);
-    render(c.getContext('2d', { willReadFrequently: true }), w, h, c.width / w);
-    return c;
-  }
-
-  /* ---------- Fluxo ---------- */
-  input.addEventListener('change', async () => {
-    const file = input.files && input.files[0];
-    if (!file) return;
-    okBox.hidden = failBox.hidden = true;
-    if (S.url) URL.revokeObjectURL(S.url);
-    S.url = URL.createObjectURL(file);
-    statusEl.textContent = 'Carregando foto…';
-    editor.hidden = false;
-    try {
-      const img = new Image();
-      img.src = S.url;
-      await img.decode();
-      S.img = img; S.rot90 = 0; S.fine = 0;
-      refit();
-      statusEl.textContent = 'Ajuste o quadro e toque em Ler código.';
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30 } },
+        audio: false
+      });
     } catch (e) {
-      statusEl.textContent = 'Erro ao abrir a foto.';
-    } finally {
-      input.value = '';
+      if (e.name === 'NotAllowedError' || e.name === 'SecurityError') throw e;
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
+    video.srcObject = stream;
+    await video.play();
+    track = stream.getVideoTracks()[0];
+    await setupTrackControls();
+    setVideoMsg('');
+    $('#startBtn').textContent = 'Parar câmera';
+    $('#hdBtn').disabled = false;
+    scanning = true;
+    const id = ++loopId;
+    scanLoop(id);
+    startAutoZoom();
+    const s = track.getSettings?.() || {};
+    setStatus(s.width ? `Câmera ${s.width}×${s.height} — procurando códigos…` : 'Procurando códigos…');
+  } catch (err) {
+    console.error(err);
+    stopCamera();
+    const denied = err.name === 'NotAllowedError';
+    setVideoMsg(denied ? 'Permissão da câmera negada.' : 'Não foi possível abrir a câmera.');
+    setStatus(denied ? 'Permita o acesso à câmera nas configurações do navegador.' : String(err.message || err), 'error');
+  }
+}
+
+function stopCamera() {
+  scanning = false; loopId++;
+  clearInterval(autoZoomTimer); autoZoomTimer = null;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; track = null; torchOn = false;
+  video.srcObject = null;
+  $('#startBtn').textContent = 'Iniciar câmera';
+  $('#hdBtn').disabled = true;
+  $('#torchBtn').hidden = true;
+  $('#zoomRow').hidden = true; $('#zoomPresets').hidden = true; $('#zoomBadge').hidden = true;
+  setVideoMsg('Toque em “Iniciar câmera”.');
+}
+
+async function setupTrackControls() {
+  const caps = track.getCapabilities?.() || {};
+  // Foco contínuo — essencial para códigos distantes ficarem nítidos.
+  try {
+    if (caps.focusMode?.includes('continuous')) await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+  } catch {}
+  // Zoom por hardware
+  zoomCaps = null;
+  if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+    zoomCaps = caps.zoom;
+    const slider = $('#zoomSlider');
+    slider.min = zoomCaps.min; slider.max = zoomCaps.max; slider.step = zoomCaps.step || 0.1;
+    currentZoom = track.getSettings?.().zoom ?? zoomCaps.min;
+    slider.value = currentZoom;
+    const cand = [1, 1.5, 2, 3, 4, 5, 6, 8, 10].filter(z => z >= zoomCaps.min && z <= zoomCaps.max);
+    zoomLevels = [...new Set([zoomCaps.min, ...cand])].sort((a, b) => a - b);
+    buildPresets();
+    $('#zoomRow').hidden = false; $('#zoomPresets').hidden = false;
+    updateZoomUI();
+  }
+  if (caps.torch) $('#torchBtn').hidden = false;
+}
+function buildPresets() {
+  const box = $('#zoomPresets');
+  box.replaceChildren();
+  zoomLevels.forEach(z => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.z = z; b.textContent = (Math.round(z * 10) / 10) + '×';
+    b.onclick = () => { lastManualZoom = Date.now(); setZoom(z); };
+    box.appendChild(b);
+  });
+}
+function updateZoomUI() {
+  const badge = $('#zoomBadge');
+  badge.hidden = !zoomCaps;
+  badge.textContent = (Math.round(currentZoom * 10) / 10) + '×';
+  $('#zoomSlider').value = currentZoom;
+  $('#zoomPresets').querySelectorAll('button').forEach(b => b.classList.toggle('active', Math.abs(+b.dataset.z - currentZoom) < 0.05));
+}
+async function setZoom(z) {
+  if (!track || !zoomCaps) return;
+  z = Math.min(zoomCaps.max, Math.max(zoomCaps.min, z));
+  try {
+    await track.applyConstraints({ advanced: [{ zoom: z }] });
+    currentZoom = z; lastZoomChange = Date.now();
+    updateZoomUI();
+  } catch (e) { console.warn('zoom', e); }
+}
+$('#zoomSlider').addEventListener('input', e => { lastManualZoom = Date.now(); setZoom(+e.target.value); });
+
+// Zoom por pinça sobre o vídeo
+(() => {
+  const wrap = $('#videoWrap');
+  const pts = new Map();
+  let startDist = 0, startZoom = 1;
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  wrap.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { startDist = dist(); startZoom = currentZoom; }
+  });
+  wrap.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2 && zoomCaps && startDist) {
+      lastManualZoom = Date.now();
+      setZoom(startZoom * dist() / startDist);
     }
   });
-
-  readBtn.addEventListener('click', async () => {
-    if (!S.img) return;
-    okBox.hidden = failBox.hidden = true;
-    readBtn.disabled = true;
-    try {
-      if (!getZX() && !(await getNative())) {
-        statusEl.textContent = 'Erro: não foi possível carregar o leitor (verifique a internet).';
-        failBox.hidden = false;
-        return;
-      }
-      const t0 = performance.now();
-      const r = await decodeSource(renderOutput());
-      const secs = ((performance.now() - t0) / 1000).toFixed(1);
-      if (r) {
-        $('val').textContent = r.text;
-        $('fmt').textContent = 'Formato: ' + r.format.replace(/_/g, '-') + ' · ' + r.engine + ' · ' + secs + 's';
-        okBox.hidden = false;
-        statusEl.textContent = 'Leitura concluída.';
-        okBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      } else {
-        failBox.hidden = false;
-        statusEl.textContent = 'Não foi possível ler (' + secs + 's).';
-        failBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-    } catch (e) {
-      statusEl.textContent = 'Erro ao processar a imagem.';
-      failBox.hidden = false;
-    } finally {
-      readBtn.disabled = false;
-    }
-  });
-
-  $('copy').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText($('val').textContent); $('copy').textContent = 'Copiado ✓'; }
-    catch (e) { $('copy').textContent = 'Selecione e copie manualmente'; }
-    setTimeout(() => $('copy').textContent = 'Copiar', 1800);
-  });
+  const up = e => { pts.delete(e.pointerId); startDist = 0; };
+  wrap.addEventListener('pointerup', up);
+  wrap.addEventListener('pointercancel', up);
+  wrap.addEventListener('pointerleave', up);
 })();
+
+// Zoom automático: se nada for lido, percorre os níveis de zoom
+function startAutoZoom() {
+  clearInterval(autoZoomTimer);
+  autoZoomTimer = setInterval(() => {
+    if (!scanning || !settings.autoZoom || !zoomCaps || zoomLevels.length < 2) return;
+    const now = Date.now();
+    if (now - lastHit < 5000 || now - lastManualZoom < 6000 || now - lastZoomChange < 2200) return;
+    const i = zoomLevels.findIndex(z => Math.abs(z - currentZoom) < 0.05);
+    setZoom(zoomLevels[(i + 1) % zoomLevels.length]);
+  }, 500);
+}
+
+$('#torchBtn').addEventListener('click', async () => {
+  if (!track) return;
+  try {
+    torchOn = !torchOn;
+    await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+    $('#torchBtn').textContent = torchOn ? '🔦 Lanterna (ligada)' : '🔦 Lanterna';
+  } catch { torchOn = false; toast('Lanterna indisponível', 'danger'); }
+});
+
+async function scanLoop(id) {
+  while (scanning && id === loopId) {
+    if (video.readyState >= 2 && video.videoWidth && !document.hidden) {
+      try {
+        const p = LIVE_PASSES[passIdx++ % LIVE_PASSES.length];
+        drawPass(video, video.videoWidth, video.videoHeight, p);
+        const res = await detector.detect(work);
+        if (res.length && res[0].rawValue) handleLiveHit(res[0].rawValue);
+      } catch (e) { console.warn(e); }
+    }
+    await sleep(usingNative ? 40 : 60);
+  }
+}
+function handleLiveHit(value) {
+  const now = Date.now();
+  lastHit = now;
+  if (value === lastHitValue && now - lastHitTime < 2500) { lastHitTime = now; return; }
+  lastHitValue = value; lastHitTime = now;
+  setStatus('Código lido!');
+  onDetected(value, 'camera');
+}
+let lastHitTime = 0;
+
+// Foto em resolução máxima + varredura em blocos
+$('#hdBtn').addEventListener('click', async () => {
+  if (!track || $('#hdBtn').disabled) return;
+  const btn = $('#hdBtn');
+  btn.disabled = true;
+  setStatus('Capturando foto em alta resolução…');
+  let bitmap = null;
+  try {
+    if ('ImageCapture' in window) {
+      const ic = new ImageCapture(track);
+      let opts;
+      try {
+        const pc = await ic.getPhotoCapabilities();
+        if (pc.imageWidth?.max) opts = { imageWidth: pc.imageWidth.max, imageHeight: pc.imageHeight?.max };
+      } catch {}
+      const blob = await ic.takePhoto(opts);
+      bitmap = await createImageBitmap(blob);
+    }
+  } catch (e) { console.warn('takePhoto falhou', e); }
+  if (!bitmap) { try { bitmap = await createImageBitmap(video); } catch {} }
+  if (!bitmap) { setStatus('Não foi possível capturar a imagem.', 'error'); btn.disabled = false; return; }
+
+  const val = await scanSource(bitmap, bitmap.width, bitmap.height, ALL_PASSES,
+    (i, n) => setStatus(`Analisando foto ${bitmap.width}×${bitmap.height} — etapa ${i}/${n}…`));
+  bitmap.close?.();
+  if (val) { lastHit = Date.now(); lastHitValue = val; lastHitTime = Date.now(); setStatus('Código lido!'); onDetected(val, 'camera'); }
+  else { setStatus('Nenhum código encontrado na foto. Aproxime/dê zoom e tente de novo.', 'error'); triggerEffects(false); }
+  btn.disabled = !track;
+});
+
+$('#startBtn').addEventListener('click', () => { stream ? stopCamera() : startCamera(); });
+
+/* ====================== Abas ====================== */
+function selectTab(which) {
+  const cam = which === 'camera';
+  $('#cameraTab').setAttribute('aria-selected', cam);
+  $('#fileTab').setAttribute('aria-selected', !cam);
+  $('#cameraPanel').hidden = !cam;
+  $('#filePanel').hidden = cam;
+  if (cam) { if (wasRunning) startCamera(); }
+  else { wasRunning = !!stream; stopCamera(); }
+}
+let wasRunning = false;
+$('#cameraTab').addEventListener('click', () => selectTab('camera'));
+$('#fileTab').addEventListener('click', () => selectTab('file'));
+document.addEventListener('visibilitychange', () => {
+  if ($('#cameraPanel').hidden) return;
+  if (document.hidden) { wasRunning = !!stream; stopCamera(); }
+  else if (wasRunning) { startCamera(); wasRunning = false; }
+});
+
+/* ====================== Escanear imagem ====================== */
+const dz = $('#dropzone'), fileInput = $('#fileInput');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragover');
+  const f = e.dataTransfer?.files?.[0];
+  if (f) handleFile(f);
+});
+fileInput.addEventListener('change', () => { const f = fileInput.files[0]; if (f) handleFile(f); fileInput.value = ''; });
+
+async function handleFile(file) {
+  if (!file.type.startsWith('image/')) { toast('Selecione um arquivo de imagem.', 'danger'); return; }
+  const url = URL.createObjectURL(file);
+  $('#previewImg').src = url;
+  $('#previewName').textContent = file.name;
+  $('#preview').hidden = false;
+  $('#dropInstructions').hidden = true;
+  const st = $('#fileStatus');
+  try {
+    const bmp = await createImageBitmap(file);
+    st.textContent = 'Analisando imagem…'; st.className = 'status';
+    const val = await scanSource(bmp, bmp.width, bmp.height, ALL_PASSES, (i, n) => { st.textContent = `Analisando imagem — etapa ${i}/${n}…`; });
+    bmp.close?.();
+    if (val) { st.textContent = 'Código lido!'; onDetected(val, 'file'); }
+    else {
+      st.textContent = 'Nenhum código detectado. Tente com outra imagem.'; st.className = 'status error';
+      toast('Nenhum código detectado. Tente com outra imagem.', 'danger');
+      triggerEffects(false);
+    }
+  } catch (e) {
+    console.error(e);
+    st.textContent = 'Erro ao processar a imagem.'; st.className = 'status error';
+  }
+}
+
+/* ====================== Diálogos e configurações ====================== */
+const historyDialog = $('#historyDialog'), settingsDialog = $('#settingsDialog');
+document.querySelectorAll('dialog [data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+[historyDialog, settingsDialog].forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
+$('#historyBtn').addEventListener('click', () => { renderHistory(); historyDialog.showModal(); });
+$('#settingsBtn').addEventListener('click', () => settingsDialog.showModal());
+$('#emptyHistoryBtn').addEventListener('click', () => {
+  if (confirm('Limpar o histórico? Esta ação não pode ser desfeita.')) {
+    LS.set(HISTORY_KEY, []); renderHistory(); toast('Histórico limpo', 'success'); historyDialog.close();
+  }
+});
+
+function renderSettingsForm() {
+  const form = $('#settingsForm');
+  form.querySelectorAll('[name="g"]').forEach(i => { i.checked = !!settings[i.value]; });
+  const list = $('#formatsList');
+  list.replaceChildren();
+  supportedFormats.forEach(f => {
+    const li = document.createElement('li');
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox'; input.name = 'f'; input.value = f;
+    input.checked = settings.formats ? settings.formats.includes(f) : true;
+    label.append(input, document.createTextNode(f));
+    li.appendChild(label);
+    list.appendChild(li);
+  });
+}
+let settingsTimer = null;
+$('#settingsForm').addEventListener('change', e => {
+  clearTimeout(settingsTimer);
+  const name = e.target.name, value = e.target.value;
+  settingsTimer = setTimeout(async () => {
+    const form = $('#settingsForm');
+    const next = {};
+    form.querySelectorAll('[name="g"]').forEach(i => { next[i.value] = i.checked; });
+    next.formats = [...form.querySelectorAll('[name="f"]:checked')].map(i => i.value);
+    const engineChanged = !!settings.forceZxing !== !!next.forceZxing;
+    settings = next;
+    LS.set(SETTINGS_KEY, settings);
+    if (name === 'f') createDetector();
+    if (engineChanged) {
+      const msg = toast('Trocando decodificador…', 'info', Infinity);
+      try { await loadDetector(); createDetector(); } catch (err) { toast('Falha ao carregar o decodificador.', 'danger'); }
+      msg.remove();
+    }
+  }, 400);
+});
+
+/* ====================== Inicialização ====================== */
+(async function init() {
+  if (typeof HTMLDialogElement !== 'function') $('#appActions').hidden = true;
+  const loading = toast('Carregando decodificador de códigos…', 'info', Infinity);
+  try {
+    await loadDetector();
+    createDetector();
+  } catch (err) {
+    console.error(err);
+    loading.remove();
+    $('#mainContainer').hidden = true;
+    $('#appActions').hidden = true;
+    toast('Não foi possível carregar o decodificador. Verifique sua conexão com a internet (necessária para a biblioteca ZXing) ou use um navegador com Barcode Detector API.', 'danger', Infinity);
+    return;
+  }
+  loading.remove();
+  renderSettingsForm();
+  renderHistory();
+  $('#startBtn').disabled = false;
+})();
+$('#startBtn').disabled = true;
 </script>
 </body>
 </html>
