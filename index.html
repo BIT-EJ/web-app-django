@@ -117,35 +117,53 @@
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-  function frameToCanvas() {
+  function frameToCanvas(maxW, rotate) {
     const vw = video.videoWidth, vh = video.videoHeight;
     if (!vw || !vh) return false;
     // zoom digital: recorta o centro
     const f = hwZoom ? 1 : 1 + zoom * (DIGITAL_MAX - 1);
     const sw = vw / f, sh = vh / f;
     const sx = (vw - sw) / 2, sy = (vh - sh) / 2;
-    const scale = Math.min(1, 1280 / sw);
-    canvas.width = Math.round(sw * scale);
-    canvas.height = Math.round(sh * scale);
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    const scale = Math.min(1, maxW / Math.max(sw, sh));
+    const w = Math.round(sw * scale), h = Math.round(sh * scale);
+    if (rotate) {
+      canvas.width = h; canvas.height = w;
+      ctx.save(); ctx.translate(h, 0); ctx.rotate(Math.PI / 2);
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+      ctx.restore();
+    } else {
+      canvas.width = w; canvas.height = h;
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+    }
     return true;
   }
 
+  let tick = 0;
+  function decodeZXing(canvasEl) {
+    const lum = new Z.HTMLCanvasElementLuminanceSource(canvasEl);
+    const bmp = new Z.BinaryBitmap(new Z.HybridBinarizer(lum));
+    const res = zxing.decode(bmp);
+    const t = res.getText();
+    return t ? { valor: t, formato: fmtName(Z.BarcodeFormat[res.getBarcodeFormat()]) } : null;
+  }
+
   async function lerFrame() {
-    if (!frameToCanvas()) return null;
+    if (!video.videoWidth) return null;
+    tick++;
     if (nativeDetector) {
       try {
-        const r = await nativeDetector.detect(canvas);
+        // detecta direto no vídeo, em resolução total (sem reduzir a imagem)
+        let src = video;
+        if (!hwZoom && zoom > 0) { frameToCanvas(4096, false); src = canvas; }
+        const r = await nativeDetector.detect(src);
         for (const b of r) if (b.rawValue) return { valor: b.rawValue, formato: fmtName(b.format) };
         return null;
       } catch (e) { nativeDetector = null; /* cai para o ZXing */ }
     }
+    // ZXing: alterna orientação normal / girada 90° (códigos na vertical)
     try {
-      const lum = new Z.HTMLCanvasElementLuminanceSource(canvas);
-      const bmp = new Z.BinaryBitmap(new Z.HybridBinarizer(lum));
-      const res = zxing.decode(bmp);
-      const t = res.getText();
-      if (t) return { valor: t, formato: fmtName(Z.BarcodeFormat[res.getBarcodeFormat()]) };
+      frameToCanvas(2000, tick % 2 === 0);
+      return decodeZXing(canvas);
     } catch (e) { /* NotFound: nada neste frame */ }
     return null;
   }
@@ -162,7 +180,7 @@
   let busy = false, last = 0;
   async function loop(ts) {
     requestAnimationFrame(loop);
-    if (busy || ts - last < 150) return;                // DetectionSpeed.normal
+    if (busy || ts - last < 100) return;                // DetectionSpeed.normal
     busy = true; last = ts;
     try {
       const r = await lerFrame();
@@ -207,6 +225,20 @@
   // scroll do mouse (desktop)
   cam.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom - Math.sign(e.deltaY) * 0.05); }, { passive: false });
 
+  // toque rápido = refoca (ajuda a ler de mais longe)
+  cam.addEventListener('click', async () => {
+    if (!track || !caps.focusMode) return;
+    try {
+      if (caps.focusMode.includes('single-shot')) {
+        await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
+        setTimeout(() => {
+          if (caps.focusMode.includes('continuous'))
+            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+        }, 1500);
+      }
+    } catch (e) {}
+  });
+
   // ---------- Lanterna ----------
   $('btnFlash').onclick = async () => {
     if (!track || !caps.torch) return snack('Lanterna não disponível neste aparelho');
@@ -242,7 +274,7 @@
     await initNative();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
         audio: false
       });
       video.srcObject = stream;
