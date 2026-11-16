@@ -6,49 +6,80 @@
 <title>Leitor de Patrimônio</title>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
-  :root { --surface:#fef7ff; --on-surface:#1d1b20; --label:#49454f; }
-  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html, body { height:100%; margin:0; background:#000; font-family:Roboto, system-ui, sans-serif; overflow:hidden; }
-  #app { display:flex; flex-direction:column; height:100%; padding-top:env(safe-area-inset-top,0px); background:#000; }
-  .icon-btn { background:none; border:0; width:48px; height:48px; border-radius:50%; cursor:pointer; color:var(--label); display:grid; place-items:center; }
-  .icon-btn:active { background:rgba(0,0,0,.12); }
-  .icon-btn svg { width:24px; height:24px; fill:currentColor; }
-  #camera { position:relative; flex:1; min-height:0; overflow:hidden; touch-action:none; background:#000; }
-  video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform-origin:center; }
-  #zoom { position:absolute; z-index:2; top:12px; right:12px; background:rgba(0,0,0,.54); color:#fff; padding:4px 10px; border-radius:12px; font-size:14px; pointer-events:none; }
-  #shade { position:absolute; inset:0; display:grid; pointer-events:none;
-    grid-template-columns:1fr min(94%,720px) 1fr; grid-template-rows:1fr min(46%,320px) 1fr; }
-  #shade > div { background:rgba(0,0,0,.45); }
-  #shade > #roi { background:transparent; position:relative; outline:2px solid rgba(255,255,255,.35); }
-  #roi i { position:absolute; width:26px; height:26px; border:4px solid #d0bcff; }
-  #roi i:nth-child(1){ left:-4px; top:-4px; border-right:0; border-bottom:0; }
-  #roi i:nth-child(2){ right:-4px; top:-4px; border-left:0; border-bottom:0; }
-  #roi i:nth-child(3){ left:-4px; bottom:-4px; border-right:0; border-top:0; }
-  #roi i:nth-child(4){ right:-4px; bottom:-4px; border-left:0; border-top:0; }
-  /* anel de foco (toque na tela) */
-  #foco { position:absolute; z-index:3; width:72px; height:72px; margin:-36px 0 0 -36px; border:2px solid #ffd54f; border-radius:50%;
-    pointer-events:none; opacity:0; transform:scale(1.4); }
-  #foco.on { opacity:1; transform:scale(1); transition:transform .18s ease-out, opacity .1s; }
-  #foco.fim { opacity:0; transition:opacity .4s .6s; }
-  #erro { position:absolute; inset:0; display:none; align-items:center; justify-content:center; text-align:center; color:#fff; padding:24px; }
-  #painel { background:var(--surface); width:100%; flex-shrink:0; padding:16px; padding-bottom:calc(16px + env(safe-area-inset-bottom,0px)); display:flex; align-items:center; }
-  #painel .txt { flex:1; min-width:0; }
-  #label { font-size:12px; font-weight:500; letter-spacing:.5px; color:var(--on-surface); }
-  #valor { font-size:22px; margin-top:4px; color:var(--on-surface); user-select:text; -webkit-user-select:text; word-break:break-all; }
-  #snack { position:fixed; left:16px; right:16px; bottom:calc(90px + env(safe-area-inset-bottom,0px)); background:#322f35; color:#f5eff7;
-    padding:14px 16px; border-radius:4px; font-size:14px; opacity:0; transform:translateY(8px); transition:.2s; pointer-events:none; }
-  #snack.on { opacity:1; transform:none; }
+  :root {
+    --primary-inv: #cfbcff;   /* inversePrimary (deepPurple) */
+    --surface: #fef7ff;
+    --on-surface: #1d1b20;
+    --label: #49454f;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; background: #000; font-family: Roboto, system-ui, sans-serif; overflow: hidden; }
+  #app { display: flex; flex-direction: column; height: 100%; }
+
+  header {
+    background: var(--primary-inv); color: var(--on-surface);
+    height: 56px; padding: 0 4px 0 16px; padding-top: env(safe-area-inset-top, 0px);
+    box-sizing: content-box; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  header h1 { font-size: 22px; font-weight: 400; margin: 0; }
+  .icon-btn { background: none; border: 0; width: 48px; height: 48px; border-radius: 50%; cursor: pointer; color: var(--on-surface); display: grid; place-items: center; }
+  .icon-btn:active { background: rgba(0,0,0,.12); }
+  .icon-btn svg { width: 24px; height: 24px; fill: currentColor; }
+
+  #camera { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; background: #000; }
+  video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: center; }
+  #zoom {
+    position: absolute; z-index: 2; top: 12px; right: 12px; background: rgba(0,0,0,.54); color: #fff;
+    padding: 4px 10px; border-radius: 12px; font-size: 14px; pointer-events: none;
+  }
+  #roi {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(88%, 560px); height: min(34%, 220px); pointer-events: none; border-radius: 12px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.55); border: 2px solid rgba(255,255,255,.35);
+  }
+  #roi i { position: absolute; width: 26px; height: 26px; border: 4px solid #d0bcff; }
+  #roi i:nth-child(1) { left: -2px; top: -2px; border-right: 0; border-bottom: 0; border-top-left-radius: 12px; }
+  #roi i:nth-child(2) { right: -2px; top: -2px; border-left: 0; border-bottom: 0; border-top-right-radius: 12px; }
+  #roi i:nth-child(3) { left: -2px; bottom: -2px; border-right: 0; border-top: 0; border-bottom-left-radius: 12px; }
+  #roi i:nth-child(4) { right: -2px; bottom: -2px; border-left: 0; border-top: 0; border-bottom-right-radius: 12px; }
+  #roi b { position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; background: rgba(255,82,82,.8); animation: varre 1.6s ease-in-out infinite alternate; }
+  @keyframes varre { from { top: 12%; } to { top: 88%; } }
+  #erro { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; color: #fff; padding: 24px; }
+
+  #painel {
+    background: var(--surface); width: 100%; flex-shrink: 0;
+    padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    display: flex; align-items: center;
+  }
+  #painel .txt { flex: 1; min-width: 0; }
+  #label { font-size: 12px; font-weight: 500; letter-spacing: .5px; color: var(--on-surface); }
+  #valor { font-size: 22px; margin-top: 4px; color: var(--on-surface); user-select: text; -webkit-user-select: text; word-break: break-all; }
+  #painel .icon-btn { color: var(--label); }
+
+  #snack {
+    position: fixed; left: 16px; right: 16px; bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+    background: #322f35; color: #f5eff7; padding: 14px 16px; border-radius: 4px; font-size: 14px;
+    opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none;
+  }
+  #snack.on { opacity: 1; transform: none; }
 </style>
 </head>
 <body>
 <div id="app">
+  <header>
+    <h1>Leitor de Patrimônio</h1>
+    <button class="icon-btn" id="btnFlash" aria-label="Lanterna">
+      <svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+    </button>
+  </header>
+
   <div id="camera">
-    <video id="video" playsinline muted autoplay disablepictureinpicture></video>
-    <div id="shade"><div></div><div></div><div></div><div></div><div id="roi"><i></i><i></i><i></i><i></i></div><div></div><div></div><div></div><div></div></div>
-    <div id="foco"></div>
+    <video id="video" playsinline muted autoplay></video>
+    <div id="roi"><i></i><i></i><i></i><i></i><b></b></div>
     <div id="zoom">Zoom 0%</div>
     <div id="erro"></div>
   </div>
+
   <div id="painel">
     <div class="txt">
       <div id="label">Aponte para um código de barras</div>
@@ -67,253 +98,161 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const video = $('video'), cam = $('camera'), roiEl = $('roi');
+  const video = $('video'), cam = $('camera');
 
   // ---------- Estado ----------
-  let zoom = 0, baseZoom = 0;
+  let zoom = 0.0, baseZoom = 0.0;          // 0.0 a 1.0, igual ao app Flutter
   let resultado = null, formato = null;
   let track = null, caps = {};
-  let hwZoom = false;
-  const DIGITAL_MAX = 4;
-  const FPS = 30;                                   // captura em 30 fps: sobra processamento para analisar cada frame a fundo
+  let hwZoom = false, torchOn = false;
+  const DIGITAL_MAX = 4;                   // zoom digital máximo (quando a câmera não tem zoom por hardware)
 
-  // ---------- Leitores ----------
+  // ---------- Leitores (todos os formatos) ----------
+  // 1) zxing-wasm (zxing-cpp em WebAssembly, o motor mais forte para web: tolera código
+  //    pequeno, pixelado, girado e invertido)  2) BarcodeDetector nativo  3) ZXing-js
   const Z = window.ZXing;
-  const hints = new Map(); hints.set(Z.DecodeHintType.TRY_HARDER, true);
-  const zxing = new Z.MultiFormatReader(); zxing.setHints(hints);
+  const hints = new Map();
+  hints.set(Z.DecodeHintType.TRY_HARDER, true);
+  const zxing = new Z.MultiFormatReader();
+  zxing.setHints(hints);
 
-  const WASM_URLS = [
-    'https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.0/dist/es/reader/index.js',
-    'https://cdn.jsdelivr.net/npm/zxing-wasm@2/reader/+esm',
-    'https://esm.sh/zxing-wasm@2/reader'
-  ];
-  const WASM_OPTS = { formats: [], tryHarder: true, tryRotate: true, tryInvert: true, tryDownscale: true, maxNumberOfSymbols: 1 };
-
-  // ----- worker: analisa UM frame em várias escalas e com vários filtros -----
-  function workerMain(urls, opts) {
-    let mod = null;
-    const ready = (async () => {
-      for (const u of urls) { try { const m = await import(u); if (m.readBarcodes) { mod = m; return true; } } catch (e) {} }
-      return false;
-    })();
-    const toGray = d => { const n = d.width * d.height, g = new Uint8ClampedArray(n), p = d.data;
-      for (let i = 0, j = 0; i < n; i++, j += 4) g[i] = (p[j] * 77 + p[j + 1] * 150 + p[j + 2] * 29) >> 8; return g; };
-    const toImg = (g, w, h) => { const d = new Uint8ClampedArray(w * h * 4);
-      for (let i = 0, j = 0; i < g.length; i++, j += 4) { d[j] = d[j + 1] = d[j + 2] = g[i]; d[j + 3] = 255; }
-      return new ImageData(d, w, h); };
-    const stretch = g => {
-      const hist = new Uint32Array(256); for (let i = 0; i < g.length; i++) hist[g[i]]++;
-      const cut = g.length * 0.01; let lo = 0, hi = 255, acc = 0;
-      for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc > cut) { lo = i; break; } }
-      acc = 0; for (let i = 255; i >= 0; i--) { acc += hist[i]; if (acc > cut) { hi = i; break; } }
-      if (hi - lo < 10) return g;
-      const o = new Uint8ClampedArray(g.length), k = 255 / (hi - lo);
-      for (let i = 0; i < g.length; i++) o[i] = (g[i] - lo) * k; return o;
-    };
-    const sharpen = (g, w, h, a) => {
-      const o = new Uint8ClampedArray(g);
-      for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
-        const i = y * w + x; o[i] = (1 + 4 * a) * g[i] - a * (g[i - 1] + g[i + 1] + g[i - w] + g[i + w]);
-      } return o;
-    };
-    const blur = (g, w, h) => {
-      const o = new Uint8ClampedArray(g);
-      for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
-        const i = y * w + x;
-        o[i] = (g[i-w-1]+g[i-w]+g[i-w+1]+g[i-1]+g[i]+g[i+1]+g[i+w-1]+g[i+w]+g[i+w+1]) / 9;
-      } return o;
-    };
-    const adaptive = (g, w, h, win, C) => {
-      const W = w + 1, I = new Uint32Array(W * (h + 1));
-      for (let y = 0; y < h; y++) { let row = 0;
-        for (let x = 0; x < w; x++) { row += g[y * w + x]; I[(y + 1) * W + x + 1] = I[y * W + x + 1] + row; } }
-      const r = win >> 1, o = new Uint8ClampedArray(g.length);
-      for (let y = 0; y < h; y++) { const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
-        for (let x = 0; x < w; x++) { const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
-          const sum = I[y1*W+x1] - I[y0*W+x1] - I[y1*W+x0] + I[y0*W+x0];
-          o[y*w+x] = g[y*w+x] < sum / ((x1-x0)*(y1-y0)) - C ? 0 : 255; } }
-      return o;
-    };
-    const otsu = g => {
-      const hist = new Uint32Array(256); for (let i = 0; i < g.length; i++) hist[g[i]]++;
-      let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
-      let sB = 0, wB = 0, best = 0, th = 128;
-      for (let t = 0; t < 256; t++) { wB += hist[t]; if (!wB) continue; const wF = g.length - wB; if (!wF) break;
-        sB += t * hist[t]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF);
-        if (v > best) { best = v; th = t; } }
-      const o = new Uint8ClampedArray(g.length); for (let i = 0; i < g.length; i++) o[i] = g[i] > th ? 255 : 0; return o;
-    };
-    const tryRead = async img => { const r = await mod.readBarcodes(img, opts); return r.find(x => x.text && x.isValid !== false) || null; };
-
-    onmessage = async (e) => {
-      const { id, bitmap, scales } = e.data;
-      try {
-        if (!(await ready)) { bitmap.close(); postMessage({ id, error: 'nowasm' }); return; }
-        // prepara o mesmo frame em cada escala
-        const L = scales.map(s => {
-          const w = Math.max(16, Math.round(bitmap.width * s)), h = Math.max(16, Math.round(bitmap.height * s));
-          const c = new OffscreenCanvas(w, h), x = c.getContext('2d', { willReadFrequently: true });
-          x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
-          x.drawImage(bitmap, 0, 0, w, h);
-          return { w, h, raw: x.getImageData(0, 0, w, h) };
-        });
-        bitmap.close();
-        let b = null;
-        // etapas do mais barato ao mais caro; cada etapa passa por todas as escalas
-        for (const it of L) { if ((b = await tryRead(it.raw))) break; }                           // 1) sem filtro
-        if (!b) for (const it of L) { it.g = stretch(toGray(it.raw));                             // 2) contraste + nitidez
-          if ((b = await tryRead(toImg(sharpen(it.g, it.w, it.h, 0.6), it.w, it.h)))) break; }
-        if (!b) for (const it of L) { if ((b = await tryRead(toImg(sharpen(it.g, it.w, it.h, 1.2), it.w, it.h)))) break; } // 3) nitidez forte
-        if (!b) for (const it of L) { it.sm = blur(it.g, it.w, it.h);                             // 4) limiar adaptativo
-          let win = Math.max(25, Math.round(Math.min(it.w, it.h) / 5)); if (win % 2 === 0) win++;
-          if ((b = await tryRead(toImg(adaptive(it.sm, it.w, it.h, win, 6), it.w, it.h)))) break; }
-        if (!b) for (const it of L) { if ((b = await tryRead(toImg(otsu(it.sm), it.w, it.h)))) break; } // 5) Otsu
-        postMessage({ id, r: b ? { valor: b.text, formato: b.format } : null });
-      } catch (err) { postMessage({ id, error: String(err) }); }
-    };
-  }
-
-  const FLUTTER_FMT = { qrcode:'qrCode', microqrcode:'microQrCode', upca:'upcA', upce:'upcE', datamatrix:'dataMatrix',
-    databar:'dataBar', databarexpanded:'dataBarExpanded', rmqrcode:'rmqrCode' };
-  const fmtName = n => { const k = String(n).toLowerCase().replace(/[^a-z0-9]/g, ''); return FLUTTER_FMT[k] || k; };
-
-  let worker = null, workerOk = false, jobId = 0;
-  const pendentes = new Map();
   let wasm = null;
-  async function initWasmMain() {
-    for (const u of WASM_URLS) { try { const m = await import(u); if (m.readBarcodes) { wasm = m; return; } } catch (e) {} }
-  }
-  function falhaWorker() {
-    workerOk = false;
-    for (const [, res] of pendentes) res(null);
-    pendentes.clear();
-    if (!wasm) initWasmMain();
-  }
-  function initWorker() {
-    try {
-      const src = `(${workerMain.toString()})(${JSON.stringify(WASM_URLS)}, ${JSON.stringify(WASM_OPTS)})`;
-      worker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
-      worker.onmessage = e => {
-        const { id, r, error } = e.data; const res = pendentes.get(id);
-        if (error === 'nowasm') return falhaWorker();
-        if (res) { pendentes.delete(id); res(r ? { valor: r.valor, formato: fmtName(r.formato) } : null); }
-      };
-      worker.onerror = falhaWorker; workerOk = true;
-    } catch (e) { falhaWorker(); }
+  async function initWasm() {
+    const urls = [
+      'https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.0/dist/es/reader/index.js',
+      'https://cdn.jsdelivr.net/npm/zxing-wasm@2/reader/+esm',
+      'https://esm.sh/zxing-wasm@2/reader'
+    ];
+    for (const u of urls) {
+      try {
+        const m = await import(u);
+        if (m.readBarcodes) { wasm = m; return; }
+      } catch (e) { /* tenta o próximo */ }
+    }
   }
 
   let nativeDetector = null;
   async function initNative() {
     if (!('BarcodeDetector' in window)) return;
-    try { nativeDetector = new BarcodeDetector({ formats: await BarcodeDetector.getSupportedFormats() }); } catch (e) { nativeDetector = null; }
+    try {
+      const fmts = await BarcodeDetector.getSupportedFormats();
+      nativeDetector = new BarcodeDetector({ formats: fmts });
+    } catch (e) { nativeDetector = null; }
   }
 
-  // ---------- Recorte (pixels reais do vídeo) ----------
+  // nomes de formato iguais aos do Flutter
+  const FLUTTER_FMT = { qrcode: 'qrCode', microqrcode: 'microQrCode', upca: 'upcA', upce: 'upcE',
+    datamatrix: 'dataMatrix', databar: 'dataBar', databarexpanded: 'dataBarExpanded', rmqrcode: 'rmqrCode' };
+  const fmtName = n => {
+    const k = String(n).toLowerCase().replace(/[^a-z0-9]/g, '');
+    return FLUTTER_FMT[k] || k;
+  };
+
+  // ---------- Área de leitura (só a moldura central é analisada) ----------
+  const roiEl = $('roi');
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-  function geom() {
-    const vw = video.videoWidth, vh = video.videoHeight, cr = cam.getBoundingClientRect();
+  function roiVideoRect() {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const cr = cam.getBoundingClientRect(), rr = roiEl.getBoundingClientRect();
     if (!vw || !vh || !cr.width) return null;
-    const s = Math.max(cr.width / vw, cr.height / vh);
-    const f = hwZoom ? 1 : 1 + zoom * (DIGITAL_MAX - 1);
-    return { vw, vh, cr, s, f };
-  }
-  const toVideo = (g, x, y) => [
-    g.vw / 2 + ((x - g.cr.left - g.cr.width / 2) / g.f) / g.s,
-    g.vh / 2 + ((y - g.cr.top - g.cr.height / 2) / g.f) / g.s
-  ];
-  function videoRect(el) {
-    const g = geom(); if (!g) return null;
-    const rr = el.getBoundingClientRect();
-    let [x0, y0] = toVideo(g, rr.left, rr.top), [x1, y1] = toVideo(g, rr.right, rr.bottom);
-    x0 = Math.max(0, Math.round(x0)); y0 = Math.max(0, Math.round(y0));
-    x1 = Math.min(g.vw, Math.round(x1)); y1 = Math.min(g.vh, Math.round(y1));
+    const s = Math.max(cr.width / vw, cr.height / vh);            // object-fit: cover
+    const f = hwZoom ? 1 : 1 + zoom * (DIGITAL_MAX - 1);          // zoom digital (CSS scale)
+    const conv = (x, y) => [
+      vw / 2 + ((x - cr.left - cr.width / 2) / f) / s,
+      vh / 2 + ((y - cr.top - cr.height / 2) / f) / s
+    ];
+    let [x0, y0] = conv(rr.left, rr.top), [x1, y1] = conv(rr.right, rr.bottom);
+    x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(vw, x1); y1 = Math.min(vh, y1);
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   }
 
-  const MAX_NATIVO = 2400;   // lado máximo do recorte enviado (nunca amplia o que não precisa)
-
-  function enviar(r, bw, bh, scales) {
-    return (async () => {
-      let bmp;
-      try { bmp = await createImageBitmap(video, r.x, r.y, r.w, r.h, { resizeWidth: bw, resizeHeight: bh, resizeQuality: 'high' }); }
-      catch (e) {
-        canvas.width = bw; canvas.height = bh;
-        ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, bw, bh);
-        try { bmp = await createImageBitmap(canvas); } catch (e2) { return null; }
-      }
-      return new Promise(res => {
-        const id = ++jobId;
-        const t = setTimeout(() => { if (pendentes.delete(id)) res(null); }, 15000);
-        pendentes.set(id, v => { clearTimeout(t); res(v); });
-        worker.postMessage({ id, bitmap: bmp, scales }, [bmp]);
-      });
-    })();
+  // Copia só a região central. Se estiver pequena/pixelada, amplia (suavizado) para o decodificador.
+  function roiToCanvas(rotate) {
+    const r = roiVideoRect();
+    if (!r || r.w < 8 || r.h < 8) return false;
+    const m = Math.max(r.w, r.h);
+    const k = m < 700 ? Math.min(3, 700 / m) : Math.min(1, 1600 / m);
+    const w = Math.round(r.w * k), h = Math.round(r.h * k);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    if (rotate) {
+      canvas.width = h; canvas.height = w;
+      ctx.save(); ctx.translate(h, 0); ctx.rotate(Math.PI / 2);
+      ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, w, h);
+      ctx.restore();
+    } else {
+      canvas.width = w; canvas.height = h;
+      ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, w, h);
+    }
+    return true;
   }
 
-  async function lerCanvasMain() {
+  let tick = 0;
+  async function lerFrame() {
+    if (!video.videoWidth) return null;
+    tick++;
+
     if (wasm) {
       try {
-        const res = await wasm.readBarcodes(ctx.getImageData(0, 0, canvas.width, canvas.height), WASM_OPTS);
+        if (!roiToCanvas(false)) return null;
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const res = await wasm.readBarcodes(img, {
+          formats: [], tryHarder: true, tryRotate: true, tryInvert: true,
+          tryDownscale: true, maxNumberOfSymbols: 1
+        });
         for (const b of res) if (b.text && b.isValid !== false) return { valor: b.text, formato: fmtName(b.format) };
         return null;
-      } catch (e) { wasm = null; }
+      } catch (e) { wasm = null; /* cai para os outros leitores */ }
     }
+
+    if (!roiToCanvas(false)) return null;
     if (nativeDetector) {
-      try { const d = await nativeDetector.detect(canvas);
-        for (const b of d) if (b.rawValue) return { valor: b.rawValue, formato: fmtName(b.format) };
-        return null; } catch (e) { nativeDetector = null; }
+      try {
+        const r = await nativeDetector.detect(canvas);
+        for (const b of r) if (b.rawValue) return { valor: b.rawValue, formato: fmtName(b.format) };
+        return null;
+      } catch (e) { nativeDetector = null; }
     }
     try {
+      if (tick % 2 === 0) roiToCanvas(true);   // alterna normal / girado 90°
       const lum = new Z.HTMLCanvasElementLuminanceSource(canvas);
       const res = zxing.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(lum)));
       const t = res.getText();
       if (t) return { valor: t, formato: fmtName(Z.BarcodeFormat[res.getBarcodeFormat()]) };
-    } catch (e) {}
+    } catch (e) { /* NotFound */ }
     return null;
   }
 
-  // Cada frame é analisado a fundo: caixa central em várias escalas (nativa, 60%, 40% e,
-  // se o recorte for pequeno, 1,6x) e, se nada for achado, o quadro inteiro em 2 escalas.
-  async function lerFrame() {
-    if (!video.videoWidth) return null;
-    const alvos = [{ el: roiEl, full: false }, { el: cam, full: true }];
-    for (const a of alvos) {
-      const r = videoRect(a.el);
-      if (!r || r.w < 8 || r.h < 8) continue;
-      const m = Math.max(r.w, r.h), base = m > MAX_NATIVO ? MAX_NATIVO / m : 1;
-      const bw = Math.round(r.w * base), bh = Math.round(r.h * base);
-      const scales = a.full ? [0.7, 0.4] : (m * base <= 1300 ? [1, 0.6, 1.6, 0.4] : [1, 0.6, 0.4]);
-      let res = null;
-      if (workerOk) res = await enviar(r, bw, bh, scales);
-      else {
-        for (const s of scales) {
-          canvas.width = Math.round(bw * s); canvas.height = Math.round(bh * s);
-          ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
-          if ((res = await lerCanvasMain())) break;
-        }
-      }
-      if (res) return res;
-    }
-    return null;
-  }
-
-  // ---------- Detecção (2 leituras iguais em 1,5 s) ----------
-  let pend = { v: null, t: 0 };
+  // ---------- Detecção (equivale ao onDetect) ----------
   function onDetect(valor, fmt) {
-    if (!valor) return;
-    if (valor === resultado) { pend.v = null; return; }
-    const agora = performance.now();
-    if (pend.v === valor && agora - pend.t < 1500) {
-      pend.v = null;
-      if (navigator.vibrate) navigator.vibrate(200);
-      resultado = valor; formato = fmt; render();
-    } else pend = { v: valor, t: agora };
+    if (valor && valor !== resultado) {
+      if (navigator.vibrate) navigator.vibrate(200);   // vibra ao ler um código novo
+      resultado = valor; formato = fmt;
+      render();
+    }
   }
 
-  // ---------- Zoom (só muda quando VOCÊ muda: pinça ou scroll) ----------
+  // Analisa só ~8 frames por segundo, e apenas a área central (processamento bem menor).
+  const INTERVALO_MS = 120;
+  let busy = false, last = 0;
+  async function processar() {
+    busy = true;
+    try {
+      const r = await lerFrame();
+      if (r) onDetect(r.valor, r.formato);
+    } finally { busy = false; }
+  }
+  function loop(ts) {
+    if (!busy && (ts || performance.now()) - last >= INTERVALO_MS) {
+      last = ts || performance.now();
+      processar();
+    }
+    if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop);
+    else requestAnimationFrame(loop);
+  }
+
+  // ---------- Zoom ----------
   function setZoom(novo) {
     const z = Math.min(1, Math.max(0, novo));
     if (z === zoom) return;
@@ -327,61 +266,52 @@
     $('zoom').textContent = `Zoom ${Math.round(zoom * 100)}%`;
   }
 
-  // ---------- Gestos: pinça = zoom, toque = foca no ponto ----------
+  // gesto de pinça (onScaleStart / onScaleUpdate)
   const ptrs = new Map();
-  let startDist = 0, gestoMax = 0, toque = null;
+  let startDist = 0;
   const dist = () => { const [a, b] = [...ptrs.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
   cam.addEventListener('pointerdown', e => {
-    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); cam.setPointerCapture(e.pointerId);
-    gestoMax = Math.max(gestoMax, ptrs.size);
-    if (ptrs.size === 1) toque = { x: e.clientX, y: e.clientY, t: performance.now() };
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    cam.setPointerCapture(e.pointerId);
     if (ptrs.size === 2) { startDist = dist(); baseZoom = zoom; }
   });
   cam.addEventListener('pointermove', e => {
     if (!ptrs.has(e.pointerId)) return;
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (ptrs.size === 2 && startDist > 0) setZoom(baseZoom + (dist() / startDist - 1) * 0.35);
+    if (ptrs.size === 2 && startDist > 0) {
+      const scale = dist() / startDist;
+      setZoom(baseZoom + (scale - 1) * 0.35);
+    }
   });
-  const up = e => {
-    const eraToque = e.type === 'pointerup' && toque && gestoMax === 1 && ptrs.size === 1 &&
-      performance.now() - toque.t < 500 && Math.hypot(e.clientX - toque.x, e.clientY - toque.y) < 12;
-    ptrs.delete(e.pointerId); startDist = 0;
-    if (ptrs.size === 0) gestoMax = 0;
-    if (eraToque) focarEm(e.clientX, e.clientY);
-  };
-  cam.addEventListener('pointerup', up); cam.addEventListener('pointercancel', up);
+  const up = e => { ptrs.delete(e.pointerId); startDist = 0; };
+  cam.addEventListener('pointerup', up);
+  cam.addEventListener('pointercancel', up);
+  // scroll do mouse (desktop)
   cam.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom - Math.sign(e.deltaY) * 0.05); }, { passive: false });
 
-  // ---------- Foco por toque (como a câmera do celular) ----------
-  let focoT;
-  async function focarEm(cx, cy) {
-    const cr = cam.getBoundingClientRect(), ring = $('foco');
-    ring.style.left = (cx - cr.left) + 'px'; ring.style.top = (cy - cr.top) + 'px';
-    ring.className = ''; void ring.offsetWidth; ring.className = 'on';
-    clearTimeout(focoT); focoT = setTimeout(() => ring.className = 'on fim', 50);
-
+  // toque rápido = refoca (ajuda a ler de mais longe)
+  cam.addEventListener('click', async () => {
     if (!track || !caps.focusMode) return;
-    const g = geom(); if (!g) return;
-    const [vx, vy] = toVideo(g, cx, cy);
-    const poi = { x: Math.min(1, Math.max(0, vx / g.vw)), y: Math.min(1, Math.max(0, vy / g.vh)) };
-    const modos = caps.focusMode;
     try {
-      const adv = {};
-      if (caps.pointsOfInterest) adv.pointsOfInterest = [poi];
-      adv.focusMode = modos.includes('single-shot') ? 'single-shot' : (modos.includes('continuous') ? 'continuous' : modos[0]);
-      await track.applyConstraints({ advanced: [adv] });
-      // depois de focar no ponto, volta ao foco contínuo mantendo esse ponto
-      if (adv.focusMode === 'single-shot' && modos.includes('continuous')) {
+      if (caps.focusMode.includes('single-shot')) {
+        await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
         setTimeout(() => {
-          const a2 = { focusMode: 'continuous' };
-          if (caps.pointsOfInterest) a2.pointsOfInterest = [poi];
-          track.applyConstraints({ advanced: [a2] }).catch(() => {});
+          if (caps.focusMode.includes('continuous'))
+            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
         }, 1500);
       }
     } catch (e) {}
-  }
+  });
 
-  // ---------- Painel ----------
+  // ---------- Lanterna ----------
+  $('btnFlash').onclick = async () => {
+    if (!track || !caps.torch) return snack('Lanterna não disponível neste aparelho');
+    torchOn = !torchOn;
+    try { await track.applyConstraints({ advanced: [{ torch: torchOn }] }); }
+    catch (e) { torchOn = !torchOn; snack('Não foi possível acionar a lanterna'); }
+  };
+
+  // ---------- Painel de resultado ----------
   function render() {
     $('label').textContent = resultado == null ? 'Aponte para um código de barras' : `Código lido (${formato || ''})`;
     $('valor').textContent = resultado ?? '—';
@@ -390,52 +320,39 @@
   $('btnLimpar').onclick = () => { resultado = null; formato = null; render(); };
   $('btnCopiar').onclick = async () => {
     try { await navigator.clipboard.writeText(resultado); }
-    catch (e) { const t = document.createElement('textarea'); t.value = resultado; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+    catch (e) {
+      const t = document.createElement('textarea'); t.value = resultado; document.body.appendChild(t);
+      t.select(); document.execCommand('copy'); t.remove();
+    }
     snack('Copiado!');
   };
+
   let snackT;
-  function snack(msg) { const s = $('snack'); s.textContent = msg; s.classList.add('on'); clearTimeout(snackT); snackT = setTimeout(() => s.classList.remove('on'), 2000); }
-
-  // ---------- Loop: um frame por vez, sem intervalo fixo (a análise é que dita o ritmo) ----------
-  let busy = false;
-  async function processar() {
-    busy = true;
-    try { const r = await lerFrame(); if (r) onDetect(r.valor, r.formato); } finally { busy = false; }
-  }
-  function loop() {
-    if (!busy) processar();
-    if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop);
-    else requestAnimationFrame(loop);
+  function snack(msg) {
+    const s = $('snack'); s.textContent = msg; s.classList.add('on');
+    clearTimeout(snackT); snackT = setTimeout(() => s.classList.remove('on'), 2000);
   }
 
-  // ---------- Câmera: alta resolução, 30 fps, foco contínuo do hardware ----------
+  // ---------- Câmera ----------
   async function start() {
     await initNative();
-    initWorker();
+    initWasm();   // carrega em segundo plano; enquanto isso usa os outros leitores
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 4096 }, height: { ideal: 3072 }, frameRate: { ideal: FPS, max: FPS } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
         audio: false
       });
       video.srcObject = stream;
       await video.play();
       track = stream.getVideoTracks()[0];
       caps = track.getCapabilities ? track.getCapabilities() : {};
-
-      try {
-        const c = { frameRate: { ideal: FPS, max: FPS } };
-        if (caps.width && caps.height) { c.width = { ideal: Math.min(caps.width.max, 4096) }; c.height = { ideal: Math.min(caps.height.max, 3072) }; }
-        await track.applyConstraints(c);
-      } catch (e) {}
-
       hwZoom = !!(caps.zoom && caps.zoom.max > caps.zoom.min);
-
-      const adv = {};
-      if (caps.focusMode && caps.focusMode.includes('continuous')) adv.focusMode = 'continuous';
-      if (caps.exposureMode && caps.exposureMode.includes('continuous')) adv.exposureMode = 'continuous';
-      if (caps.whiteBalanceMode && caps.whiteBalanceMode.includes('continuous')) adv.whiteBalanceMode = 'continuous';
-      if (Object.keys(adv).length) track.applyConstraints({ advanced: [adv] }).catch(() => {});
-
+      // foco contínuo, se suportado
+      if (caps.focusMode && caps.focusMode.includes('continuous')) {
+        const adv = { focusMode: 'continuous' };
+        if (caps.pointsOfInterest) adv.pointsOfInterest = [{ x: 0.5, y: 0.5 }];  // foco no centro
+        track.applyConstraints({ advanced: [adv] }).catch(() => {});
+      }
       loop();
     } catch (e) {
       const el = $('erro'); el.style.display = 'flex';
