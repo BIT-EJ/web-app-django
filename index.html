@@ -34,7 +34,7 @@
     .scanner-box {
       width: 100%;
       max-width: 500px;
-      min-height: 260px;
+      min-height: 280px;
       background: #000;
       border: 2px solid #333;
       border-radius: 16px;
@@ -49,10 +49,9 @@
       width: 100%;
     }
 
-    /* Esconde elementos extras que a lib cria por padrão */
-    #reader__dashboard_section_csr span,
-    #reader__status_span {
-      display: none !important;
+    #reader video {
+      object-fit: cover;
+      border-radius: 14px;
     }
 
     .placeholder-text {
@@ -150,7 +149,6 @@
     const statusEl = document.getElementById('status');
     const placeholderEl = document.getElementById('placeholder');
 
-    // Inicializa a instância da biblioteca Html5Qrcode
     const html5QrCode = new Html5Qrcode("reader", {
       formatsToSupport: [
         Html5QrcodeSupportedFormats.EAN_13,
@@ -160,86 +158,110 @@
         Html5QrcodeSupportedFormats.CODE_128,
         Html5QrcodeSupportedFormats.CODE_39,
         Html5QrcodeSupportedFormats.ITF,
-        Html5QrcodeSupportedFormats.CODABAR
+        Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.QR_CODE
       ],
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true
+      },
       verbose: false
     });
 
     let isScanning = false;
 
+    async function stopScanner(successMessage = null) {
+      if (!isScanning) return;
+
+      try {
+        await html5QrCode.stop();
+        html5QrCode.clear();
+      } catch (err) {
+        console.error('Erro ao parar:', err);
+      } finally {
+        isScanning = false;
+        placeholderEl.style.display = 'block';
+        statusEl.textContent = successMessage || 'Câmera parada';
+        actionBtn.textContent = 'Iniciar Câmera';
+        actionBtn.classList.remove('stop-mode');
+        actionBtn.disabled = false;
+      }
+    }
+
     async function toggleScanner() {
       actionBtn.disabled = true;
 
-      // SE ESTIVER LENDO -> PARA A CÂMERA
       if (isScanning) {
-        try {
-          await html5QrCode.stop();
-          html5QrCode.clear();
-          isScanning = false;
-          placeholderEl.style.display = 'block';
-          statusEl.textContent = 'Câmera parada';
-          actionBtn.textContent = 'Iniciar Câmera';
-          actionBtn.classList.remove('stop-mode');
-        } catch (err) {
-          console.error('Erro ao parar:', err);
-        } finally {
-          actionBtn.disabled = false;
-        }
+        await stopScanner();
         return;
       }
 
-      // SE ESTIVER PARADO -> LIMPA O ANTERIOR E INICIA A CÂMERA
       barcodeEl.textContent = 'Aguardando...';
       statusEl.textContent = 'Abrindo câmera...';
       placeholderEl.style.display = 'none';
 
+      // Calcula a área de leitura proporcional ao tamanho real do vídeo
+      const qrboxFunction = (viewfinderWidth, viewfinderHeight) => {
+        const width = Math.floor(viewfinderWidth * 0.85);
+        const height = Math.floor(viewfinderHeight * 0.45);
+        return {
+          width: Math.max(220, width),
+          height: Math.max(110, height)
+        };
+      };
+
       const config = {
-        fps: 15,
-        qrbox: { width: 280, height: 140 }, // Área focada para códigos de barras horizontais
-        aspectRatio: 1.5
+        fps: 20,
+        qrbox: qrboxFunction,
+        videoConstraints: {
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          focusMode: "continuous"
+        }
       };
 
       try {
         await html5QrCode.start(
-          { facingMode: "environment" }, // Prioriza câmera traseira, com fallback automático para webcam
+          { facingMode: "environment" },
           config,
-          (decodedText) => {
-            // Sucesso na leitura
+          (decodedText, decodedResult) => {
             barcodeEl.textContent = decodedText;
-            statusEl.textContent = 'Código lido com sucesso!';
 
             if (navigator.vibrate) {
               navigator.vibrate(100);
             }
 
-            // Para a câmera automaticamente após ler o código
-            toggleScanner();
+            const formatName = decodedResult?.result?.format?.formatName || '';
+            const msg = formatName
+              ? `Código lido (${formatName})!`
+              : 'Código lido com sucesso!';
+
+            stopScanner(msg);
           },
           () => {
-            // Ignora erros de frame vazio enquanto procura o código
+            // Ignora frames sem código detectado
           }
         );
 
         isScanning = true;
-        statusEl.textContent = 'Aponte para o código de barras...';
+        statusEl.textContent = 'Centralize o código de barras na área marcada...';
         actionBtn.textContent = 'Parar Câmera';
         actionBtn.classList.add('stop-mode');
+        actionBtn.disabled = false;
 
       } catch (err) {
         console.error('Erro ao iniciar câmera:', err);
         placeholderEl.style.display = 'block';
         barcodeEl.textContent = '---';
-        statusEl.textContent = 'Erro: Verifique a permissão da câmera ou use HTTPS.';
+        statusEl.textContent = 'Erro ao acessar a câmera. Verifique as permissões.';
         actionBtn.textContent = 'Tentar Novamente';
         actionBtn.classList.remove('stop-mode');
-      } finally {
         actionBtn.disabled = false;
       }
     }
 
     actionBtn.addEventListener('click', toggleScanner);
 
-    // Garante que a câmera desligue se o usuário sair da aba
     window.addEventListener('pagehide', () => {
       if (isScanning) {
         html5QrCode.stop().catch(() => {});
