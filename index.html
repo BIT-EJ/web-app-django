@@ -1,456 +1,267 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Leitor de Patrimônio com Ações</title>
-  
-  <!-- Biblioteca de leitura de códigos -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Leitor de Patrimônio</title>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<style>
+  :root {
+    --primary-inv: #cfbcff;   /* inversePrimary (deepPurple) */
+    --surface: #fef7ff;
+    --on-surface: #1d1b20;
+    --label: #49454f;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; background: #000; font-family: Roboto, system-ui, sans-serif; overflow: hidden; }
+  #app { display: flex; flex-direction: column; height: 100%; }
 
-  <style>
-    :root {
-      --appbar-bg: #eaddff;
-      --appbar-text: #21005d;
-      --surface-bg: #fef7ff;
-      --text-primary: #1d1b20;
-      --text-secondary: #49454f;
-      --snackbar-bg: #322f35;
-      --snackbar-text: #f5eff7;
-      --primary-color: #6750a4;
-    }
+  header {
+    background: var(--primary-inv); color: var(--on-surface);
+    height: 56px; padding: 0 4px 0 16px; padding-top: env(safe-area-inset-top, 0px);
+    box-sizing: content-box; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  header h1 { font-size: 22px; font-weight: 400; margin: 0; }
+  .icon-btn { background: none; border: 0; width: 48px; height: 48px; border-radius: 50%; cursor: pointer; color: var(--on-surface); display: grid; place-items: center; }
+  .icon-btn:active { background: rgba(0,0,0,.12); }
+  .icon-btn svg { width: 24px; height: 24px; fill: currentColor; }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-    }
+  #camera { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; background: #000; }
+  video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: center; }
+  #zoom {
+    position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,.54); color: #fff;
+    padding: 4px 10px; border-radius: 12px; font-size: 14px; pointer-events: none;
+  }
+  #erro { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; color: #fff; padding: 24px; }
 
-    html, body {
-      width: 100%;
-      height: 100dvh;
-      overflow: hidden;
-      background-color: #000000;
-      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      display: flex;
-      flex-direction: column;
-    }
+  #painel {
+    background: var(--surface); width: 100%; flex-shrink: 0;
+    padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    display: flex; align-items: center;
+  }
+  #painel .txt { flex: 1; min-width: 0; }
+  #label { font-size: 12px; font-weight: 500; letter-spacing: .5px; color: var(--on-surface); }
+  #valor { font-size: 22px; margin-top: 4px; color: var(--on-surface); user-select: text; -webkit-user-select: text; word-break: break-all; }
+  #painel .icon-btn { color: var(--label); }
 
-    .app-bar {
-      background-color: var(--appbar-bg);
-      color: var(--appbar-text);
-      padding-top: env(safe-area-inset-top);
-      height: calc(56px + env(safe-area-inset-top));
-      padding-left: 16px;
-      padding-right: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-      z-index: 20;
-      flex-shrink: 0;
-    }
-
-    .app-bar h1 {
-      font-size: 20px;
-      font-weight: 500;
-    }
-
-    .icon-btn {
-      background: transparent;
-      border: none;
-      color: inherit;
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: background-color 0.2s;
-    }
-
-    .icon-btn:active {
-      background-color: rgba(0, 0, 0, 0.1);
-    }
-
-    .icon-btn svg {
-      width: 24px;
-      height: 24px;
-      fill: currentColor;
-    }
-
-    .camera-container {
-      position: relative;
-      flex: 1;
-      width: 100%;
-      background-color: #000;
-      overflow: hidden;
-      touch-action: none;
-      user-select: none;
-    }
-
-    #reader {
-      width: 100% !important;
-      height: 100% !important;
-      border: none !important;
-    }
-
-    #reader video {
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important;
-      transform-origin: center center;
-    }
-
-    #reader__dashboard,
-    #reader__scan_region img {
-      display: none !important;
-    }
-
-    .zoom-badge {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      background-color: rgba(0, 0, 0, 0.54);
-      color: #ffffff;
-      padding: 4px 10px;
-      border-radius: 12px;
-      font-size: 14px;
-      z-index: 10;
-      pointer-events: none;
-    }
-
-    .result-panel {
-      width: 100%;
-      background-color: var(--surface-bg);
-      color: var(--text-primary);
-      padding: 16px 16px calc(16px + env(safe-area-inset-bottom)) 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      z-index: 20;
-      flex-shrink: 0;
-    }
-
-    .result-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .result-text-group {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .result-label {
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text-secondary);
-      margin-bottom: 4px;
-    }
-
-    .result-value {
-      font-size: 20px;
-      font-weight: 400;
-      color: var(--text-primary);
-      word-break: break-all;
-      user-select: text;
-    }
-
-    .action-buttons {
-      display: none;
-      align-items: center;
-      gap: 4px;
-      flex-shrink: 0;
-    }
-
-    .action-buttons.visible {
-      display: flex;
-    }
-
-    /* Botão de ação inteligente extra (ex: Abrir Link) */
-    .smart-action-bar {
-      display: none;
-      gap: 8px;
-    }
-
-    .smart-action-bar.visible {
-      display: flex;
-    }
-
-    .btn-action {
-      flex: 1;
-      background-color: var(--primary-color);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 10px 16px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      text-align: center;
-      text-decoration: none;
-    }
-
-    .btn-action:active {
-      opacity: 0.8;
-    }
-
-    .snackbar {
-      position: fixed;
-      bottom: calc(140px + env(safe-area-inset-bottom));
-      left: 16px;
-      right: 16px;
-      background-color: var(--snackbar-bg);
-      color: var(--snackbar-text);
-      padding: 14px 16px;
-      border-radius: 4px;
-      font-size: 14px;
-      box-shadow: 0 3px 5px -1px rgba(0,0,0,0.2);
-      opacity: 0;
-      transform: translateY(20px);
-      pointer-events: none;
-      transition: opacity 0.2s, transform 0.2s;
-      z-index: 50;
-    }
-
-    .snackbar.show {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  </style>
+  #snack {
+    position: fixed; left: 16px; right: 16px; bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+    background: #322f35; color: #f5eff7; padding: 14px 16px; border-radius: 4px; font-size: 14px;
+    opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none;
+  }
+  #snack.on { opacity: 1; transform: none; }
+</style>
 </head>
 <body>
-
-  <header class="app-bar">
+<div id="app">
+  <header>
     <h1>Leitor de Patrimônio</h1>
-    <button id="torch-btn" class="icon-btn" title="Alternar lanterna" aria-label="Lanterna">
-      <svg id="torch-icon" viewBox="0 0 24 24">
-        <path d="M7 2v11h3v9l7-12h-4l4-8z"/>
-      </svg>
+    <button class="icon-btn" id="btnFlash" aria-label="Lanterna">
+      <svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
     </button>
   </header>
 
-  <main class="camera-container" id="camera-area">
-    <div id="reader"></div>
-    <div class="zoom-badge" id="zoom-badge">Zoom 0%</div>
-  </main>
+  <div id="camera">
+    <video id="video" playsinline muted autoplay></video>
+    <div id="zoom">Zoom 0%</div>
+    <div id="erro"></div>
+  </div>
 
-  <footer class="result-panel">
-    <div class="result-row">
-      <div class="result-text-group">
-        <span class="result-label" id="result-label">Aponte para um código de barras</span>
-        <span class="result-value" id="result-value">—</span>
-      </div>
-
-      <div class="action-buttons" id="action-buttons">
-        <button id="copy-btn" class="icon-btn" title="Copiar" aria-label="Copiar">
-          <svg viewBox="0 0 24 24">
-            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-          </svg>
-        </button>
-        <button id="clear-btn" class="icon-btn" title="Limpar" aria-label="Limpar">
-          <svg viewBox="0 0 24 24">
-            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-          </svg>
-        </button>
-      </div>
+  <div id="painel">
+    <div class="txt">
+      <div id="label">Aponte para um código de barras</div>
+      <div id="valor">—</div>
     </div>
+    <button class="icon-btn" id="btnCopiar" title="Copiar" style="display:none">
+      <svg viewBox="0 0 24 24"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
+    </button>
+    <button class="icon-btn" id="btnLimpar" title="Limpar" style="display:none">
+      <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    </button>
+  </div>
+</div>
+<div id="snack">Copiado!</div>
 
-    <!-- Botão dinâmico baseado no conteúdo lido -->
-    <div class="smart-action-bar" id="smart-action-bar">
-      <a id="smart-link-btn" href="#" target="_blank" class="btn-action">Abrir Link</a>
-    </div>
-  </footer>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const video = $('video'), cam = $('camera');
 
-  <div id="snackbar" class="snackbar">Copiado!</div>
+  // ---------- Estado ----------
+  let zoom = 0.0, baseZoom = 0.0;          // 0.0 a 1.0, igual ao app Flutter
+  let resultado = null, formato = null;
+  let track = null, caps = {};
+  let hwZoom = false, torchOn = false;
+  const DIGITAL_MAX = 4;                   // zoom digital máximo (quando a câmera não tem zoom por hardware)
 
-  <script>
-    let html5QrCode = null;
-    let zoom = 0.0;
-    let baseZoom = 0.0;
-    let resultado = null;
-    let formato = null;
-    let torchOn = false;
-    let initialPinchDistance = 0;
+  // ---------- Formato: nome igual ao Flutter (ean13, code128, qrCode...) ----------
+  const fmtName = n => String(n).toLowerCase().split('_')
+    .map((p, i) => i === 0 ? p : p.charAt(0).toUpperCase() + p.slice(1)).join('');
 
-    const cameraArea = document.getElementById('camera-area');
-    const zoomBadge = document.getElementById('zoom-badge');
-    const resultLabel = document.getElementById('result-label');
-    const resultValue = document.getElementById('result-value');
-    const actionButtons = document.getElementById('action-buttons');
-    const smartActionBar = document.getElementById('smart-action-bar');
-    const smartLinkBtn = document.getElementById('smart-link-btn');
-    const torchBtn = document.getElementById('torch-btn');
-    const copyBtn = document.getElementById('copy-btn');
-    const clearBtn = document.getElementById('clear-btn');
-    const snackbar = document.getElementById('snackbar');
+  // ---------- Leitores (todos os formatos) ----------
+  const Z = window.ZXing;
+  const hints = new Map();
+  hints.set(Z.DecodeHintType.TRY_HARDER, true);
+  const zxing = new Z.MultiFormatReader();
+  zxing.setHints(hints);
 
-    function renderUI() {
-      if (resultado === null) {
-        resultLabel.textContent = 'Aponte para um código de barras';
-        resultValue.textContent = '—';
-        actionButtons.classList.remove('visible');
-        smartActionBar.classList.remove('visible');
-      } else {
-        resultLabel.textContent = `Código lido (${formato ?? ''})`;
-        resultValue.textContent = resultado;
-        actionButtons.classList.add('visible');
+  let nativeDetector = null;
+  async function initNative() {
+    if (!('BarcodeDetector' in window)) return;
+    try {
+      const fmts = await BarcodeDetector.getSupportedFormats();
+      nativeDetector = new BarcodeDetector({ formats: fmts }); // sem filtro = lê todos
+    } catch (e) { nativeDetector = null; }
+  }
 
-        // Verifica se o texto lido é um link válido (URL)
-        if (isValidHttpUrl(resultado)) {
-          smartLinkBtn.href = resultado;
-          smartLinkBtn.textContent = '🌐 Abrir Link';
-          smartActionBar.classList.add('visible');
-        } else {
-          // Exemplo de ação customizada para patrimônio (pesquisar em sistema interno)
-          smartLinkBtn.href = `https://www.google.com/search?q=patrimonio+${encodeURIComponent(resultado)}`;
-          smartLinkBtn.textContent = '🔍 Pesquisar Patrimônio';
-          smartActionBar.classList.add('visible');
-        }
-      }
-      zoomBadge.textContent = `Zoom ${Math.round(zoom * 100)}%`;
-    }
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    function isValidHttpUrl(string) {
+  function frameToCanvas() {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return false;
+    // zoom digital: recorta o centro
+    const f = hwZoom ? 1 : 1 + zoom * (DIGITAL_MAX - 1);
+    const sw = vw / f, sh = vh / f;
+    const sx = (vw - sw) / 2, sy = (vh - sh) / 2;
+    const scale = Math.min(1, 1280 / sw);
+    canvas.width = Math.round(sw * scale);
+    canvas.height = Math.round(sh * scale);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    return true;
+  }
+
+  async function lerFrame() {
+    if (!frameToCanvas()) return null;
+    if (nativeDetector) {
       try {
-        const url = new URL(string);
-        return url.protocol === "http:" || url.protocol === "https:";
-      } catch (_) {
-        return false;
-      }
+        const r = await nativeDetector.detect(canvas);
+        for (const b of r) if (b.rawValue) return { valor: b.rawValue, formato: fmtName(b.format) };
+        return null;
+      } catch (e) { nativeDetector = null; /* cai para o ZXing */ }
     }
+    try {
+      const lum = new Z.HTMLCanvasElementLuminanceSource(canvas);
+      const bmp = new Z.BinaryBitmap(new Z.HybridBinarizer(lum));
+      const res = zxing.decode(bmp);
+      const t = res.getText();
+      if (t) return { valor: t, formato: fmtName(Z.BarcodeFormat[res.getBarcodeFormat()]) };
+    } catch (e) { /* NotFound: nada neste frame */ }
+    return null;
+  }
 
-    function onDetect(decodedText, decodedResult) {
-      if (decodedText && decodedText.length > 0) {
-        if (decodedText !== resultado) {
-          if (navigator.vibrate) {
-            navigator.vibrate(100);
-          }
-          resultado = decodedText;
-          formato = decodedResult?.result?.format?.formatName || 'DESCONHECIDO';
-          renderUI();
-        }
-      }
+  // ---------- Detecção (equivale ao onDetect) ----------
+  function onDetect(valor, fmt) {
+    if (valor && valor !== resultado) {
+      if (navigator.vibrate) navigator.vibrate(200);   // vibra ao ler um código novo
+      resultado = valor; formato = fmt;
+      render();
     }
+  }
 
-    async function setZoom(novo) {
-      const z = Math.min(Math.max(novo, 0.0), 1.0);
-      if (z === zoom) return;
-      zoom = z;
-      renderUI();
+  let busy = false, last = 0;
+  async function loop(ts) {
+    requestAnimationFrame(loop);
+    if (busy || ts - last < 150) return;                // DetectionSpeed.normal
+    busy = true; last = ts;
+    try {
+      const r = await lerFrame();
+      if (r) onDetect(r.valor, r.formato);
+    } finally { busy = false; }
+  }
 
-      const video = document.querySelector('#reader video');
-      if (!video || !video.srcObject) return;
-      const track = video.srcObject.getVideoTracks()[0];
-      if (!track) return;
-
-      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-      if (capabilities.zoom) {
-        const min = capabilities.zoom.min || 1;
-        const max = capabilities.zoom.max || 5;
-        const hwZoom = min + z * (max - min);
-        try {
-          await track.applyConstraints({ advanced: [{ zoom: hwZoom }] });
-        } catch (e) {
-          video.style.transform = `scale(${1 + z * 3})`;
-        }
-      } else {
-        video.style.transform = `scale(${1 + z * 3})`;
-      }
+  // ---------- Zoom ----------
+  function setZoom(novo) {
+    const z = Math.min(1, Math.max(0, novo));
+    if (z === zoom) return;
+    zoom = z;
+    if (hwZoom && track) {
+      const { min, max } = caps.zoom;
+      track.applyConstraints({ advanced: [{ zoom: min + z * (max - min) }] }).catch(() => {});
+    } else {
+      video.style.transform = `scale(${1 + z * (DIGITAL_MAX - 1)})`;
     }
+    $('zoom').textContent = `Zoom ${Math.round(zoom * 100)}%`;
+  }
 
-    torchBtn.addEventListener('click', async () => {
-      const video = document.querySelector('#reader video');
-      const track = video?.srcObject?.getVideoTracks()[0];
-      if (!track) return;
-      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-      if (!capabilities.torch) {
-        showSnackbar('Lanterna não suportada');
-        return;
-      }
-      try {
-        torchOn = !torchOn;
-        await track.applyConstraints({ advanced: [{ torch: torchOn }] });
-        torchBtn.style.opacity = torchOn ? '1' : '0.7';
-      } catch (err) {
-        console.error(err);
-      }
-    });
-
-    copyBtn.addEventListener('click', async () => {
-      if (!resultado) return;
-      try {
-        await navigator.clipboard.writeText(resultado);
-        showSnackbar('Copiado!');
-      } catch {
-        showSnackbar('Erro ao copiar');
-      }
-    });
-
-    clearBtn.addEventListener('click', () => {
-      resultado = null;
-      formato = null;
-      renderUI();
-    });
-
-    function showSnackbar(msg) {
-      snackbar.textContent = msg;
-      snackbar.classList.add('show');
-      setTimeout(() => snackbar.classList.remove('show'), 2000);
+  // gesto de pinça (onScaleStart / onScaleUpdate)
+  const ptrs = new Map();
+  let startDist = 0;
+  const dist = () => { const [a, b] = [...ptrs.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  cam.addEventListener('pointerdown', e => {
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    cam.setPointerCapture(e.pointerId);
+    if (ptrs.size === 2) { startDist = dist(); baseZoom = zoom; }
+  });
+  cam.addEventListener('pointermove', e => {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 2 && startDist > 0) {
+      const scale = dist() / startDist;
+      setZoom(baseZoom + (scale - 1) * 0.35);
     }
+  });
+  const up = e => { ptrs.delete(e.pointerId); startDist = 0; };
+  cam.addEventListener('pointerup', up);
+  cam.addEventListener('pointercancel', up);
+  // scroll do mouse (desktop)
+  cam.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom - Math.sign(e.deltaY) * 0.05); }, { passive: false });
 
-    function getDistance(touches) {
-      return Math.hypot(
-        touches[0].clientX - touches[1].clientX,
-        touches[0].clientY - touches[1].clientY
-      );
+  // ---------- Lanterna ----------
+  $('btnFlash').onclick = async () => {
+    if (!track || !caps.torch) return snack('Lanterna não disponível neste aparelho');
+    torchOn = !torchOn;
+    try { await track.applyConstraints({ advanced: [{ torch: torchOn }] }); }
+    catch (e) { torchOn = !torchOn; snack('Não foi possível acionar a lanterna'); }
+  };
+
+  // ---------- Painel de resultado ----------
+  function render() {
+    $('label').textContent = resultado == null ? 'Aponte para um código de barras' : `Código lido (${formato || ''})`;
+    $('valor').textContent = resultado ?? '—';
+    $('btnCopiar').style.display = $('btnLimpar').style.display = resultado == null ? 'none' : 'grid';
+  }
+  $('btnLimpar').onclick = () => { resultado = null; formato = null; render(); };
+  $('btnCopiar').onclick = async () => {
+    try { await navigator.clipboard.writeText(resultado); }
+    catch (e) {
+      const t = document.createElement('textarea'); t.value = resultado; document.body.appendChild(t);
+      t.select(); document.execCommand('copy'); t.remove();
     }
+    snack('Copiado!');
+  };
 
-    cameraArea.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        initialPinchDistance = getDistance(e.touches);
-        baseZoom = zoom;
+  let snackT;
+  function snack(msg) {
+    const s = $('snack'); s.textContent = msg; s.classList.add('on');
+    clearTimeout(snackT); snackT = setTimeout(() => s.classList.remove('on'), 2000);
+  }
+
+  // ---------- Câmera ----------
+  async function start() {
+    await initNative();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      track = stream.getVideoTracks()[0];
+      caps = track.getCapabilities ? track.getCapabilities() : {};
+      hwZoom = !!(caps.zoom && caps.zoom.max > caps.zoom.min);
+      // foco contínuo, se suportado
+      if (caps.focusMode && caps.focusMode.includes('continuous')) {
+        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
       }
-    }, { passive: false });
-
-    cameraArea.addEventListener('touchmove', (e) => {
-      if (e.touches.length === 2 && initialPinchDistance > 0) {
-        e.preventDefault();
-        const currentDistance = getDistance(e.touches);
-        const scale = currentDistance / initialPinchDistance;
-        setZoom(baseZoom + (scale - 1) * 0.35);
-      }
-    }, { passive: false });
-
-    cameraArea.addEventListener('touchend', () => {
-      initialPinchDistance = 0;
-    });
-
-    async function initScanner() {
-      html5QrCode = new Html5Qrcode("reader", { verbose: false });
-      const config = { fps: 15, aspectRatio: window.innerHeight / window.innerWidth };
-      try {
-        await html5QrCode.start({ facingMode: "environment" }, config, onDetect, () => {});
-      } catch (err) {
-        resultLabel.textContent = 'Erro ao acessar a câmera';
-        resultValue.textContent = 'Verifique as permissões (HTTPS necessário)';
-        console.error(err);
-      }
+      requestAnimationFrame(loop);
+    } catch (e) {
+      const el = $('erro'); el.style.display = 'flex';
+      el.textContent = 'Não foi possível acessar a câmera. Permita o acesso e abra a página em HTTPS (ou localhost).';
     }
-
-    window.addEventListener('DOMContentLoaded', initScanner);
-    window.addEventListener('beforeunload', () => {
-      if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.stop().catch(() => {});
-      }
-    });
-  </script>
+  }
+  start();
+})();
+</script>
 </body>
 </html>
