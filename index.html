@@ -42,12 +42,11 @@
       align-items: center;
       justify-content: center;
       position: relative;
-      /* Impede que o navegador dê zoom na página inteira ao fazer pinça na câmera */
       touch-action: none;
       user-select: none;
     }
 
-    video, canvas {
+    video, canvas#overlay {
       position: absolute;
       inset: 0;
       width: 100%;
@@ -56,7 +55,7 @@
       transform-origin: center center;
     }
 
-    canvas {
+    canvas#overlay {
       pointer-events: none;
     }
 
@@ -180,6 +179,10 @@
     const statusEl = document.getElementById('status');
     const placeholderEl = document.getElementById('placeholder');
 
+    // Canvas oculto para analisar recortes ampliados (detecção de longa distância)
+    const cropCanvas = document.createElement('canvas');
+    const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
+
     const detector = new BarcodeDetector({
       formats: [
         'qr_code',
@@ -198,11 +201,12 @@
     let videoTrack = null;
     let isScanning = false;
     let scanTimer = null;
+    let frameStep = 0;
 
-    // Variáveis de controle do Zoom (Pinça)
+    // Controle de Zoom (Pinça)
     let supportsHardwareZoom = false;
     let minZoom = 1;
-    let maxZoom = 5;
+    let maxZoom = 6;
     let currentZoom = 1;
     let initialPinchDistance = 0;
     let initialZoomAtPinch = 1;
@@ -226,18 +230,16 @@
             advanced: [{ zoom: currentZoom }]
           });
         } catch (e) {
-          console.warn('Falha ao aplicar zoom de hardware:', e);
+          console.warn('Falha ao aplicar zoom físico:', e);
         } finally {
           isApplyingZoom = false;
         }
       } else {
-        // Fallback: Zoom visual via CSS caso a câmera não exponha zoom físico
         video.style.transform = `scale(${currentZoom})`;
         canvas.style.transform = `scale(${currentZoom})`;
       }
     }
 
-    // Eventos de toque para movimento de pinça (2 dedos)
     scannerBox.addEventListener('touchstart', (e) => {
       if (!isScanning || e.touches.length !== 2) return;
       e.preventDefault();
@@ -263,7 +265,7 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
-    function drawBoundingBox(cornerPoints) {
+    function drawBoundingBox(cornerPoints, offsetX = 0, offsetY = 0) {
       if (!cornerPoints || cornerPoints.length < 4) return;
 
       canvas.width = video.videoWidth;
@@ -271,11 +273,11 @@
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.strokeStyle = '#00ff88';
-      ctx.lineWidth = 6;
+      ctx.lineWidth = Math.max(4, Math.round(canvas.width / 200));
       ctx.beginPath();
-      ctx.moveTo(cornerPoints[0].x, cornerPoints[0].y);
+      ctx.moveTo(cornerPoints[0].x + offsetX, cornerPoints[0].y + offsetY);
       for (let i = 1; i < cornerPoints.length; i++) {
-        ctx.lineTo(cornerPoints[i].x, cornerPoints[i].y);
+        ctx.lineTo(cornerPoints[i].x + offsetX, cornerPoints[i].y + offsetY);
       }
       ctx.closePath();
       ctx.stroke();
@@ -308,20 +310,73 @@
       actionBtn.disabled = false;
     }
 
+    // Varredura Multi-Escala: alterna entre frame inteiro e recortes ampliados para códigos distantes
+    async function detectMultiScale() {
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      if (!vw || !vh) return null;
+
+      frameStep = (frameStep + 1) % 3;
+
+      // Passo 0: Frame completo (pega códigos grandes ou nos cantos da tela)
+      if (frameStep === 0) {
+        const codes = await detector.detect(video);
+        if (codes.length > 0) {
+          return { code: codes[0], offsetX: 0, offsetY: 0 };
+        }
+      }
+
+      // Passo 1: Recorte de 50% central em resolução nativa (pega códigos médios/distantes sem redimensionar)
+      if (frameStep === 1) {
+        const cw = Math.floor(vw * 0.55);
+        const ch = Math.floor(vh * 0.55);
+        const sx = Math.floor((vw - cw) / 2);
+        const sy = Math.floor((vh - ch) / 2);
+
+        cropCanvas.width = cw;
+        cropCanvas.height = ch;
+        cropCtx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
+
+        const codes = await detector.detect(cropCanvas);
+        if (codes.length > 0) {
+          return { code: codes[0], offsetX: sx, offsetY: sy };
+        }
+      }
+
+      // Passo 2: Recorte de 35% central (pega códigos bem pequenos e longe da câmera)
+      if (frameStep === 2) {
+        const cw = Math.floor(vw * 0.35);
+        const ch = Math.floor(vh * 0.35);
+        const sx = Math.floor((vw - cw) / 2);
+        const sy = Math.floor((vh - ch) / 2);
+
+        cropCanvas.width = cw;
+        cropCanvas.height = ch;
+        cropCtx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
+
+        const codes = await detector.detect(cropCanvas);
+        if (codes.length > 0) {
+          return { code: codes[0], offsetX: sx, offsetY: sy };
+        }
+      }
+
+      return null;
+    }
+
     async function scanLoop() {
       if (!isScanning || video.readyState < 2) {
-        if (isScanning) scanTimer = setTimeout(scanLoop, 80);
+        if (isScanning) scanTimer = setTimeout(scanLoop, 60);
         return;
       }
 
       try {
-        const barcodes = await detector.detect(video);
+        const result = await detectMultiScale();
 
-        if (barcodes.length > 0 && isScanning) {
-          const found = barcodes[0];
+        if (result && isScanning) {
+          const { code, offsetX, offsetY } = result;
 
-          drawBoundingBox(found.cornerPoints);
-          barcodeEl.textContent = found.rawValue;
+          drawBoundingBox(code.cornerPoints, offsetX, offsetY);
+          barcodeEl.textContent = code.rawValue;
 
           if (navigator.vibrate) {
             navigator.vibrate(100);
@@ -329,7 +384,7 @@
 
           isScanning = false;
           setTimeout(() => {
-            stopScanner(`Código lido (${found.format.toUpperCase()})!`);
+            stopScanner(`Código lido (${code.format.toUpperCase()})!`);
           }, 250);
           return;
         }
@@ -338,28 +393,36 @@
       }
 
       if (isScanning) {
-        scanTimer = setTimeout(scanLoop, 80);
+        scanTimer = setTimeout(scanLoop, 60);
       }
     }
 
-    async function getBestCameraStream() {
-      const highResConstraints = {
-        audio: false,
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      };
+    async function getUltraResCameraStream() {
+      // Solicita a maior resolução possível do sensor (4K -> 2K -> 1080p)
+      const resolutions = [
+        { width: { ideal: 3840 }, height: { ideal: 2160 } },
+        { width: { ideal: 2560 }, height: { ideal: 1440 } },
+        { width: { ideal: 1920 }, height: { ideal: 1080 } }
+      ];
 
-      try {
-        return await navigator.mediaDevices.getUserMedia(highResConstraints);
-      } catch {
-        return await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: true
-        });
+      for (const res of resolutions) {
+        try {
+          return await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: { ideal: 'environment' },
+              ...res
+            }
+          });
+        } catch {
+          // Tenta a próxima resolução
+        }
       }
+
+      return await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: true
+      });
     }
 
     async function toggleScanner() {
@@ -371,18 +434,18 @@
       }
 
       barcodeEl.textContent = 'Aguardando...';
-      statusEl.textContent = 'Abrindo câmera em alta definição...';
+      statusEl.textContent = 'Abrindo câmera em máxima resolução...';
       placeholderEl.style.display = 'none';
 
       try {
-        stream = await getBestCameraStream();
+        stream = await getUltraResCameraStream();
         video.srcObject = stream;
         await video.play();
 
         videoTrack = stream.getVideoTracks()[0];
         supportsHardwareZoom = false;
         minZoom = 1;
-        maxZoom = 4;
+        maxZoom = 6;
         currentZoom = 1;
 
         if (videoTrack && videoTrack.getCapabilities) {
@@ -393,16 +456,19 @@
             advanced.push({ focusMode: 'continuous' });
           }
 
-          // Verifica suporte nativo da lente ao zoom
           if (caps.zoom) {
             supportsHardwareZoom = true;
             minZoom = caps.zoom.min || 1;
-            maxZoom = Math.min(caps.zoom.max || 5, 8); // Limita a 8x para não perder foco
-            currentZoom = minZoom;
+            maxZoom = Math.min(caps.zoom.max || 6, 8);
+
+            // Inicia com leve zoom (1.6x) se suportado, eliminando o efeito grande-angular
+            const initialSmartZoom = Math.min(Math.max(1.6, minZoom), maxZoom);
+            currentZoom = initialSmartZoom;
+            advanced.push({ zoom: initialSmartZoom });
           }
 
           if (advanced.length > 0) {
-            videoTrack.applyConstraints({ advanced }).catch(() => {});
+            await videoTrack.applyConstraints({ advanced }).catch(() => {});
           }
         }
 
@@ -410,7 +476,7 @@
         zoomBadge.style.display = 'block';
 
         isScanning = true;
-        statusEl.textContent = 'Aponte para o código (faça pinça na tela para zoom)...';
+        statusEl.textContent = 'Aponte para o código (faça pinça para aproximar)...';
         actionBtn.textContent = 'Parar Câmera';
         actionBtn.classList.add('stop-mode');
         actionBtn.disabled = false;
