@@ -3,566 +3,443 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Leitor de Código</title>
+  <title>Leitor de Patrimônio</title>
+  
+  <!-- Biblioteca JS equivalente ao mobile_scanner (lê EAN, UPC, Code128, QR, etc.) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <style>
+    :root {
+      /* Paleta baseada no ColorScheme.fromSeed(seedColor: Colors.deepPurple) */
+      --appbar-bg: #eaddff;
+      --appbar-text: #21005d;
+      --surface-bg: #fef7ff;
+      --text-primary: #1d1b20;
+      --text-secondary: #49454f;
+      --snackbar-bg: #322f35;
+      --snackbar-text: #f5eff7;
+    }
+
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
     }
 
     html, body {
       width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    }
-
-    /* Câmera ocupando 100% da tela */
-    .camera-fullscreen {
-      position: fixed;
-      inset: 0;
-      width: 100vw;
       height: 100dvh;
-      background: #000;
-      touch-action: none;
-      user-select: none;
       overflow: hidden;
+      background-color: #000000;
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
     }
 
-    video, canvas#overlay {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      transform-origin: center center;
-    }
-
-    canvas#overlay {
-      pointer-events: none;
-      z-index: 2;
-    }
-
-    /* Indicador de Zoom em porcentagem (0% a 100%) */
-    #zoom-badge {
-      position: fixed;
-      top: max(18px, env(safe-area-inset-top));
-      right: 18px;
-      background: rgba(0, 0, 0, 0.55);
-      backdrop-filter: blur(6px);
-      color: #fff;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 14px;
-      font-weight: 600;
-      z-index: 10;
-      pointer-events: none;
-      display: none;
-    }
-
-    /* Barra branca na parte inferior */
-    .bottom-bar {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: #ffffff;
-      color: #111111;
-      padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
-      border-top-left-radius: 20px;
-      border-top-right-radius: 20px;
-      box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.28);
-      z-index: 20;
+    /* AppBar (equivalente ao AppBar do Scaffold) */
+    .app-bar {
+      background-color: var(--appbar-bg);
+      color: var(--appbar-text);
+      padding-top: env(safe-area-inset-top);
+      height: calc(56px + env(safe-area-inset-top));
+      padding-left: 16px;
+      padding-right: 8px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
-    }
-
-    .result-info {
-      flex: 1;
-      min-width: 0;
-      text-align: left;
-    }
-
-    #status {
-      font-size: 12px;
-      color: #666666;
-      margin-bottom: 3px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    #barcode {
-      font-size: 19px;
-      font-weight: 700;
-      color: #111111;
-      overflow-wrap: anywhere;
-      line-height: 1.2;
-    }
-
-    #barcode.detected {
-      color: #008a4b;
-    }
-
-    #start-btn {
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      z-index: 20;
       flex-shrink: 0;
-      padding: 12px 20px;
+    }
+
+    .app-bar h1 {
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: 0.15px;
+    }
+
+    .icon-btn {
+      background: transparent;
       border: none;
+      color: inherit;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .icon-btn:active {
+      background-color: rgba(0, 0, 0, 0.1);
+    }
+
+    .icon-btn svg {
+      width: 24px;
+      height: 24px;
+      fill: currentColor;
+    }
+
+    /* Área da Câmera (Expanded + Stack + GestureDetector) */
+    .camera-container {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      background-color: #000;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+    }
+
+    #reader {
+      width: 100% !important;
+      height: 100% !important;
+      border: none !important;
+    }
+
+    /* Ajusta o vídeo interno da lib html5-qrcode para preencher a tela */
+    #reader video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+      transform-origin: center center;
+    }
+
+    /* Oculta elementos extras padrão da biblioteca */
+    #reader__dashboard,
+    #reader__scan_region img {
+      display: none !important;
+    }
+
+    /* Indicador de Zoom (Positioned top: 12, right: 12) */
+    .zoom-badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background-color: rgba(0, 0, 0, 0.54);
+      color: #ffffff;
+      padding: 4px 10px;
       border-radius: 12px;
       font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
-      background: #111111;
-      color: #ffffff;
-      transition: opacity 0.2s, transform 0.1s;
+      z-index: 10;
+      pointer-events: none;
     }
 
-    #start-btn:active {
-      transform: scale(0.96);
+    /* _PainelResultado com SafeArea */
+    .result-panel {
+      width: 100%;
+      background-color: var(--surface-bg);
+      color: var(--text-primary);
+      padding: 16px 16px calc(16px + env(safe-area-inset-bottom)) 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 20;
+      flex-shrink: 0;
     }
 
-    #start-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+    .result-text-group {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .result-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .result-value {
+      font-size: 22px;
+      font-weight: 400;
+      color: var(--text-primary);
+      word-break: break-all;
+      user-select: text; /* Equivalente ao SelectableText */
+    }
+
+    .action-buttons {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .action-buttons.visible {
+      display: flex;
+    }
+
+    /* SnackBar do Flutter */
+    .snackbar {
+      position: fixed;
+      bottom: calc(90px + env(safe-area-inset-bottom));
+      left: 16px;
+      right: 16px;
+      background-color: var(--snackbar-bg);
+      color: var(--snackbar-text);
+      padding: 14px 16px;
+      border-radius: 4px;
+      font-size: 14px;
+      box-shadow: 0 3px 5px -1px rgba(0,0,0,0.2), 0 6px 10px 0 rgba(0,0,0,0.14);
+      opacity: 0;
+      transform: translateY(20px);
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 50;
+    }
+
+    .snackbar.show {
+      opacity: 1;
+      transform: translateY(0);
     }
   </style>
 </head>
-
 <body>
 
-  <div class="camera-fullscreen" id="scanner-box">
-    <video id="camera" autoplay muted playsinline></video>
-    <canvas id="overlay"></canvas>
-    <span id="zoom-badge">0%</span>
-  </div>
+  <!-- AppBar -->
+  <header class="app-bar">
+    <h1>Leitor de Patrimônio</h1>
+    <button id="torch-btn" class="icon-btn" title="Alternar lanterna" aria-label="Lanterna">
+      <!-- Ícone Icons.flash_on -->
+      <svg id="torch-icon" viewBox="0 0 24 24">
+        <path d="M7 2v11h3v9l7-12h-4l4-8z"/>
+      </svg>
+    </button>
+  </header>
 
-  <div class="bottom-bar">
-    <div class="result-info">
-      <div id="status">Câmera desligada</div>
-      <div id="barcode">Aguardando leitura...</div>
+  <!-- Área da Câmera -->
+  <main class="camera-container" id="camera-area">
+    <div id="reader"></div>
+    <div class="zoom-badge" id="zoom-badge">Zoom 0%</div>
+  </main>
+
+  <!-- _PainelResultado -->
+  <footer class="result-panel">
+    <div class="result-text-group">
+      <span class="result-label" id="result-label">Aponte para um código de barras</span>
+      <span class="result-value" id="result-value">—</span>
     </div>
-    <button id="start-btn">Iniciar</button>
-  </div>
 
-  <script type="module">
-    import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es/pure.min.js';
+    <div class="action-buttons" id="action-buttons">
+      <button id="copy-btn" class="icon-btn" title="Copiar" aria-label="Copiar">
+        <!-- Ícone Icons.copy -->
+        <svg viewBox="0 0 24 24">
+          <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+        </svg>
+      </button>
+      <button id="clear-btn" class="icon-btn" title="Limpar" aria-label="Limpar">
+        <!-- Ícone Icons.close -->
+        <svg viewBox="0 0 24 24">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+      </button>
+    </div>
+  </footer>
 
-    const scannerBox = document.getElementById('scanner-box');
-    const video = document.getElementById('camera');
-    const canvas = document.getElementById('overlay');
-    const ctx = canvas.getContext('2d');
-    const zoomBadge = document.getElementById('zoom-badge');
-    const startBtn = document.getElementById('start-btn');
-    const barcodeEl = document.getElementById('barcode');
-    const statusEl = document.getElementById('status');
+  <!-- SnackBar -->
+  <div id="snackbar" class="snackbar">Copiado!</div>
 
-    // Canvas auxiliar com alto contraste para leitura precisa em zoom/proximidade
-    const procCanvas = document.createElement('canvas');
-    const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
+  <script>
+    // Estado equivalente ao _ScannerPageState
+    let html5QrCode = null;
+    let zoom = 0.0;        // 0.0 até 1.0 (igual ao Flutter)
+    let baseZoom = 0.0;
+    let resultado = null;
+    let formato = null;
+    let torchOn = false;
 
-    const detector = new BarcodeDetector({
-      formats: [
-        'qr_code',
-        'ean_13',
-        'ean_8',
-        'upc_a',
-        'upc_e',
-        'code_128',
-        'code_39',
-        'itf',
-        'codabar'
-      ]
-    });
-
-    let stream = null;
-    let videoTrack = null;
-    let isScanning = false;
-    let scanTimer = null;
-    let frameStep = 0;
-
-    // Filtro de estabilidade para evitar leitura errada de dígitos em códigos 1D tremidos
-    let lastCandidateValue = '';
-    let candidateHits = 0;
-
-    // Controle de Zoom Máximo Híbrido (0% a 100%)
-    let supportsHardwareZoom = false;
-    let hwMinZoom = 1;
-    let hwMaxZoom = 1;
-    let totalMaxZoom = 10;
-    let currentZoom = 1;
-    let currentDigitalScale = 1;
+    // Variáveis para cálculo do gesto de pinça (GestureDetector onScaleStart/Update)
     let initialPinchDistance = 0;
-    let initialZoomAtPinch = 1;
-    let isApplyingZoom = false;
 
-    function getTouchDistance(touches) {
-      const dx = touches[0].clientX - touches[1].clientX;
-      const dy = touches[0].clientY - touches[1].clientY;
-      return Math.hypot(dx, dy);
-    }
+    // Elementos da UI
+    const cameraArea = document.getElementById('camera-area');
+    const zoomBadge = document.getElementById('zoom-badge');
+    const resultLabel = document.getElementById('result-label');
+    const resultValue = document.getElementById('result-value');
+    const actionButtons = document.getElementById('action-buttons');
+    const torchBtn = document.getElementById('torch-btn');
+    const copyBtn = document.getElementById('copy-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const snackbar = document.getElementById('snackbar');
 
-    function updateZoomPercentageBadge() {
-      if (totalMaxZoom <= hwMinZoom) {
-        zoomBadge.textContent = '0%';
-        return;
+    // Atualiza a interface (_PainelResultado)
+    function renderUI() {
+      if (resultado === null) {
+        resultLabel.textContent = 'Aponte para um código de barras';
+        resultValue.textContent = '—';
+        actionButtons.classList.remove('visible');
+      } else {
+        resultLabel.textContent = `Código lido (${formato ?? ''})`;
+        resultValue.textContent = resultado;
+        actionButtons.classList.add('visible');
       }
-      const percent = Math.round(((currentZoom - hwMinZoom) / (totalMaxZoom - hwMinZoom)) * 100);
-      zoomBadge.textContent = `${Math.min(Math.max(percent, 0), 100)}%`;
+      zoomBadge.textContent = `Zoom ${Math.round(zoom * 100)}%`;
     }
 
-    async function triggerRefocus() {
-      if (!videoTrack || !videoTrack.getCapabilities) return;
-      try {
-        const caps = videoTrack.getCapabilities();
-        if (caps.focusMode && caps.focusMode.includes('continuous')) {
-          await videoTrack.applyConstraints({
-            advanced: [{ focusMode: 'continuous' }]
-          });
+    // Equivalente ao _onDetect(BarcodeCapture capture)
+    function onDetect(decodedText, decodedResult) {
+      if (decodedText && decodedText.length > 0) {
+        if (decodedText !== resultado) {
+          // HapticFeedback.vibrate()
+          if (navigator.vibrate) {
+            navigator.vibrate(100);
+          }
+          resultado = decodedText;
+          formato = decodedResult?.result?.format?.formatName || 'DESCONHECIDO';
+          renderUI();
         }
-      } catch {
-        // Ignora se não suportado
       }
     }
 
-    async function setZoomLevel(newZoom) {
-      currentZoom = Math.min(Math.max(newZoom, hwMinZoom), totalMaxZoom);
-      updateZoomPercentageBadge();
+    // Equivalente ao _setZoom(double novo)
+    async function setZoom(novo) {
+      const z = Math.min(Math.max(novo, 0.0), 1.0); // clamp(0.0, 1.0)
+      if (z === zoom) return;
+      zoom = z;
+      renderUI();
 
-      if (supportsHardwareZoom && videoTrack) {
-        const targetHwZoom = Math.min(currentZoom, hwMaxZoom);
-        currentDigitalScale = currentZoom > hwMaxZoom ? (currentZoom / hwMaxZoom) : 1;
+      const video = document.querySelector('#reader video');
+      if (!video || !video.srcObject) return;
 
-        video.style.transform = `scale(${currentDigitalScale})`;
-        canvas.style.transform = `scale(${currentDigitalScale})`;
+      const track = video.srcObject.getVideoTracks()[0];
+      if (!track) return;
 
-        if (isApplyingZoom) return;
-        isApplyingZoom = true;
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+
+      // Usa zoom óptico/nativo da lente se suportado; caso contrário, fallback visual
+      if (capabilities.zoom) {
+        const min = capabilities.zoom.min || 1;
+        const max = capabilities.zoom.max || 5;
+        const hwZoom = min + z * (max - min);
         try {
-          await videoTrack.applyConstraints({
-            advanced: [{ zoom: targetHwZoom }]
-          });
+          await track.applyConstraints({ advanced: [{ zoom: hwZoom }] });
         } catch (e) {
-          console.warn('Falha ao aplicar zoom físico:', e);
-        } finally {
-          isApplyingZoom = false;
+          video.style.transform = `scale(${1 + z * 3})`;
         }
       } else {
-        currentDigitalScale = currentZoom;
-        video.style.transform = `scale(${currentDigitalScale})`;
-        canvas.style.transform = `scale(${currentDigitalScale})`;
+        video.style.transform = `scale(${1 + z * 3})`;
       }
     }
 
-    scannerBox.addEventListener('touchstart', (e) => {
-      if (!isScanning || e.touches.length !== 2) return;
-      e.preventDefault();
-      initialPinchDistance = getTouchDistance(e.touches);
-      initialZoomAtPinch = currentZoom;
-    }, { passive: false });
+    // Equivalente ao _controller.toggleTorch()
+    torchBtn.addEventListener('click', async () => {
+      const video = document.querySelector('#reader video');
+      const track = video?.srcObject?.getVideoTracks()[0];
+      if (!track) return;
 
-    scannerBox.addEventListener('touchmove', (e) => {
-      if (!isScanning || e.touches.length !== 2 || initialPinchDistance === 0) return;
-      e.preventDefault();
-      const currentDistance = getTouchDistance(e.touches);
-      const scaleFactor = currentDistance / initialPinchDistance;
-      setZoomLevel(initialZoomAtPinch * scaleFactor);
-    }, { passive: false });
-
-    scannerBox.addEventListener('touchend', (e) => {
-      if (e.touches.length < 2 && initialPinchDistance > 0) {
-        initialPinchDistance = 0;
-        // Recalibra o foco da lente após ajustar o zoom
-        triggerRefocus();
-      }
-    });
-
-    function clearOverlay() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    function drawBoundingBox(cornerPoints, offsetX = 0, offsetY = 0) {
-      if (!cornerPoints || cornerPoints.length < 4) return;
-
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = '#00ff88';
-      ctx.lineWidth = Math.max(4, Math.round(canvas.width / 200));
-      ctx.beginPath();
-      ctx.moveTo(cornerPoints[0].x + offsetX, cornerPoints[0].y + offsetY);
-      for (let i = 1; i < cornerPoints.length; i++) {
-        ctx.lineTo(cornerPoints[i].x + offsetX, cornerPoints[i].y + offsetY);
-      }
-      ctx.closePath();
-      ctx.stroke();
-    }
-
-    function stopScanner(successMessage = null) {
-      isScanning = false;
-
-      if (scanTimer) {
-        clearTimeout(scanTimer);
-        scanTimer = null;
-      }
-
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-      }
-
-      videoTrack = null;
-      video.srcObject = null;
-      video.style.transform = 'scale(1)';
-      canvas.style.transform = 'scale(1)';
-      currentDigitalScale = 1;
-      zoomBadge.style.display = 'none';
-      clearOverlay();
-
-      statusEl.textContent = successMessage || 'Câmera desligada';
-      startBtn.style.display = 'inline-block';
-      startBtn.disabled = false;
-    }
-
-    // Desenha a região no canvas aplicando contraste alto para leitura precisa de barras
-    function captureEnhancedCrop(sx, sy, cw, ch) {
-      procCanvas.width = cw;
-      procCanvas.height = ch;
-      procCtx.filter = 'grayscale(1) contrast(1.45)';
-      procCtx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
-      procCtx.filter = 'none';
-    }
-
-    async function detectPrecisionMultiScale() {
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-      if (!vw || !vh) return null;
-
-      // Calcula a área real visível na tela considerando o zoom digital aplicado
-      const visibleW = Math.floor(vw / currentDigitalScale);
-      const visibleH = Math.floor(vh / currentDigitalScale);
-      const visibleX = Math.floor((vw - visibleW) / 2);
-      const visibleY = Math.floor((vh - visibleH) / 2);
-
-      frameStep = (frameStep + 1) % 3;
-
-      // Passo 0: Toda a área visível na tela com realce de contraste (ótimo para códigos grandes/aproximados)
-      if (frameStep === 0) {
-        captureEnhancedCrop(visibleX, visibleY, visibleW, visibleH);
-        const codes = await detector.detect(procCanvas);
-        if (codes.length > 0) {
-          return { code: codes[0], offsetX: visibleX, offsetY: visibleY };
-        }
-      }
-
-      // Passo 1: Faixa horizontal larga (85% largura x 45% altura) com contraste alto — ideal para códigos de barras 1D aproximados
-      if (frameStep === 1) {
-        const cw = Math.floor(visibleW * 0.85);
-        const ch = Math.floor(visibleH * 0.45);
-        const sx = visibleX + Math.floor((visibleW - cw) / 2);
-        const sy = visibleY + Math.floor((visibleH - ch) / 2);
-
-        captureEnhancedCrop(sx, sy, cw, ch);
-        const codes = await detector.detect(procCanvas);
-        if (codes.length > 0) {
-          return { code: codes[0], offsetX: sx, offsetY: sy };
-        }
-      }
-
-      // Passo 2: Recorte central concentrado (40% da área visível) com contraste alto — ideal para códigos muito pequenos/distantes
-      if (frameStep === 2) {
-        const cw = Math.floor(visibleW * 0.40);
-        const ch = Math.floor(visibleH * 0.40);
-        const sx = visibleX + Math.floor((visibleW - cw) / 2);
-        const sy = visibleY + Math.floor((visibleH - ch) / 2);
-
-        captureEnhancedCrop(sx, sy, cw, ch);
-        const codes = await detector.detect(procCanvas);
-        if (codes.length > 0) {
-          return { code: codes[0], offsetX: sx, offsetY: sy };
-        }
-      }
-
-      return null;
-    }
-
-    async function scanLoop() {
-      if (!isScanning || video.readyState < 2) {
-        if (isScanning) scanTimer = setTimeout(scanLoop, 55);
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+      if (!capabilities.torch) {
+        showSnackbar('Lanterna não suportada neste dispositivo');
         return;
       }
 
       try {
-        const result = await detectPrecisionMultiScale();
-
-        if (result && isScanning) {
-          const { code, offsetX, offsetY } = result;
-          const isQrCode = code.format === 'qr_code';
-
-          // QR Codes possuem correção de erro nativa; códigos de barras 1D exigem 2 confirmações seguidas para precisão máxima
-          if (code.rawValue === lastCandidateValue) {
-            candidateHits++;
-          } else {
-            lastCandidateValue = code.rawValue;
-            candidateHits = 1;
-          }
-
-          if (isQrCode || candidateHits >= 2) {
-            drawBoundingBox(code.cornerPoints, offsetX, offsetY);
-            barcodeEl.textContent = code.rawValue;
-            barcodeEl.classList.add('detected');
-
-            if (navigator.vibrate) {
-              navigator.vibrate(100);
-            }
-
-            isScanning = false;
-            setTimeout(() => {
-              stopScanner(`Código lido (${code.format.toUpperCase()})`);
-            }, 250);
-            return;
-          }
-        }
+        torchOn = !torchOn;
+        await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+        torchBtn.style.opacity = torchOn ? '1' : '0.7';
       } catch (err) {
-        console.error('Erro no frame:', err);
+        console.error('Erro ao alternar lanterna:', err);
       }
+    });
 
-      if (isScanning) {
-        scanTimer = setTimeout(scanLoop, 55);
+    // Copiar para área de transferência + SnackBar
+    copyBtn.addEventListener('click', async () => {
+      if (!resultado) return;
+      try {
+        await navigator.clipboard.writeText(resultado);
+        showSnackbar('Copiado!');
+      } catch {
+        // Fallback para navegadores mais antigos
+        const input = document.createElement('input');
+        input.value = resultado;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        showSnackbar('Copiado!');
       }
+    });
+
+    // Limpar resultado (onLimpar)
+    clearBtn.addEventListener('click', () => {
+      resultado = null;
+      formato = null;
+      renderUI();
+    });
+
+    function showSnackbar(msg) {
+      snackbar.textContent = msg;
+      snackbar.classList.add('show');
+      setTimeout(() => snackbar.classList.remove('show'), 2000);
     }
 
-    async function getMaxQualityCameraStream() {
-      const constraintsList = [
-        {
-          audio: false,
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 3840 },
-            height: { ideal: 2160 },
-            frameRate: { ideal: 30 }
-          }
-        },
-        {
-          audio: false,
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 2560 },
-            height: { ideal: 1440 },
-            frameRate: { ideal: 30 }
-          }
-        },
-        {
-          audio: false,
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30 }
-          }
-        },
-        {
-          audio: false,
-          video: { facingMode: 'environment' }
-        },
-        {
-          audio: false,
-          video: true
-        }
-      ];
-
-      for (const constraints of constraintsList) {
-        try {
-          return await navigator.mediaDevices.getUserMedia(constraints);
-        } catch {
-          // Tenta o próximo nível de resolução
-        }
-      }
-
-      throw new Error('Não foi possível acessar a câmera.');
+    // Gesto de pinça (equivalente a onScaleStart e onScaleUpdate)
+    function getDistance(touches) {
+      return Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY
+      );
     }
 
-    async function startScanner() {
-      if (isScanning) return;
-      startBtn.disabled = true;
+    cameraArea.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        initialPinchDistance = getDistance(e.touches);
+        baseZoom = zoom;
+      }
+    }, { passive: false });
 
-      lastCandidateValue = '';
-      candidateHits = 0;
+    cameraArea.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && initialPinchDistance > 0) {
+        e.preventDefault();
+        const currentDistance = getDistance(e.touches);
+        const scale = currentDistance / initialPinchDistance;
+        // Mesma fórmula do código Dart: _baseZoom + (details.scale - 1) * 0.35
+        setZoom(baseZoom + (scale - 1) * 0.35);
+      }
+    }, { passive: false });
 
-      barcodeEl.textContent = 'Procurando código...';
-      barcodeEl.classList.remove('detected');
-      statusEl.textContent = 'Iniciando câmera em qualidade máxima...';
+    cameraArea.addEventListener('touchend', () => {
+      initialPinchDistance = 0;
+    });
+
+    // Inicializa o scanner (equivalente ao MobileScannerController)
+    async function initScanner() {
+      html5QrCode = new Html5Qrcode("reader", {
+        // Sem restrição de formatos = lê todos os tipos (EAN, UPC, Code128, QR etc.)
+        verbose: false
+      });
+
+      const config = {
+        fps: 15, // DetectionSpeed.normal
+        aspectRatio: window.innerHeight / window.innerWidth
+      };
 
       try {
-        stream = await getMaxQualityCameraStream();
-        video.srcObject = stream;
-        await video.play();
-
-        videoTrack = stream.getVideoTracks()[0];
-        supportsHardwareZoom = false;
-        hwMinZoom = 1;
-        hwMaxZoom = 1;
-        totalMaxZoom = 10;
-        currentZoom = 1;
-        currentDigitalScale = 1;
-
-        if (videoTrack && videoTrack.getCapabilities) {
-          const caps = videoTrack.getCapabilities();
-          const advanced = [];
-
-          const maxConstraints = {};
-          if (caps.width && caps.width.max) {
-            maxConstraints.width = { ideal: caps.width.max };
-          }
-          if (caps.height && caps.height.max) {
-            maxConstraints.height = { ideal: caps.height.max };
-          }
-          if (Object.keys(maxConstraints).length > 0) {
-            await videoTrack.applyConstraints(maxConstraints).catch(() => {});
-          }
-
-          if (caps.focusMode && caps.focusMode.includes('continuous')) {
-            advanced.push({ focusMode: 'continuous' });
-          }
-
-          if (caps.zoom) {
-            supportsHardwareZoom = true;
-            hwMinZoom = caps.zoom.min || 1;
-            hwMaxZoom = caps.zoom.max || 10;
-            totalMaxZoom = hwMaxZoom * 2;
-            currentZoom = hwMinZoom;
-            advanced.push({ zoom: hwMinZoom });
-          }
-
-          if (advanced.length > 0) {
-            await videoTrack.applyConstraints({ advanced }).catch(() => {});
-          }
-        }
-
-        updateZoomPercentageBadge();
-        zoomBadge.style.display = 'block';
-
-        startBtn.style.display = 'none';
-
-        isScanning = true;
-        statusEl.textContent = 'Aponte para o código (pinça na tela para aproximar)';
-        scanLoop();
-
+        await html5QrCode.start(
+          { facingMode: "environment" }, // CameraFacing.back
+          config,
+          onDetect,
+          () => {} // Ignora frames sem código
+        );
       } catch (err) {
-        console.error('Erro ao iniciar câmera:', err);
-        stopScanner('Erro ao acessar a câmera');
-        barcodeEl.textContent = 'Permissão negada ou indisponível';
+        resultLabel.textContent = 'Erro ao acessar a câmera';
+        resultValue.textContent = 'Verifique as permissões (HTTPS necessário)';
+        console.error(err);
       }
     }
 
-    startBtn.addEventListener('click', startScanner);
-    window.addEventListener('pagehide', () => stopScanner());
+    window.addEventListener('DOMContentLoaded', initScanner);
+    window.addEventListener('beforeunload', () => {
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().catch(() => {});
+      }
+    });
   </script>
-
 </body>
 </html>
