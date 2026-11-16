@@ -6,59 +6,38 @@
 <title>Leitor de Patrimônio</title>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
-  :root {
-    --primary-inv: #cfbcff;   /* inversePrimary (deepPurple) */
-    --surface: #fef7ff;
-    --on-surface: #1d1b20;
-    --label: #49454f;
-  }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { height: 100%; margin: 0; background: #000; font-family: Roboto, system-ui, sans-serif; overflow: hidden; }
-  #app { display: flex; flex-direction: column; height: 100%; }
-
-  header {
-    background: var(--primary-inv); color: var(--on-surface);
-    height: 56px; padding: 0 4px 0 16px; padding-top: env(safe-area-inset-top, 0px);
-    box-sizing: content-box; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
-  }
-  header h1 { font-size: 22px; font-weight: 400; margin: 0; }
-  .icon-btn { background: none; border: 0; width: 48px; height: 48px; border-radius: 50%; cursor: pointer; color: var(--on-surface); display: grid; place-items: center; }
-  .icon-btn:active { background: rgba(0,0,0,.12); }
-  .icon-btn svg { width: 24px; height: 24px; fill: currentColor; }
-
-  #camera { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; background: #000; }
-  video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: center; }
-  #zoom {
-    position: absolute; z-index: 2; top: 12px; right: 12px; background: rgba(0,0,0,.54); color: #fff;
-    padding: 4px 10px; border-radius: 12px; font-size: 14px; pointer-events: none;
-  }
-  #shade { position: absolute; inset: 0; display: grid; pointer-events: none;
-    grid-template-columns: 1fr min(88%, 560px) 1fr; grid-template-rows: 1fr min(34%, 220px) 1fr; }
-  #shade > div { background: rgba(0,0,0,.55); }
-  #shade > #roi { background: transparent; position: relative; outline: 2px solid rgba(255,255,255,.35); border-radius: 0; }
-  #roi i { position: absolute; width: 26px; height: 26px; border: 4px solid #d0bcff; }
-  #roi i:nth-child(1) { left: -4px; top: -4px; border-right: 0; border-bottom: 0; }
-  #roi i:nth-child(2) { right: -4px; top: -4px; border-left: 0; border-bottom: 0; }
-  #roi i:nth-child(3) { left: -4px; bottom: -4px; border-right: 0; border-top: 0; }
-  #roi i:nth-child(4) { right: -4px; bottom: -4px; border-left: 0; border-top: 0; }
-  #erro { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; color: #fff; padding: 24px; }
-
-  #painel {
-    background: var(--surface); width: 100%; flex-shrink: 0;
-    padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-    display: flex; align-items: center;
-  }
-  #painel .txt { flex: 1; min-width: 0; }
-  #label { font-size: 12px; font-weight: 500; letter-spacing: .5px; color: var(--on-surface); }
-  #valor { font-size: 22px; margin-top: 4px; color: var(--on-surface); user-select: text; -webkit-user-select: text; word-break: break-all; }
-  #painel .icon-btn { color: var(--label); }
-
-  #snack {
-    position: fixed; left: 16px; right: 16px; bottom: calc(90px + env(safe-area-inset-bottom, 0px));
-    background: #322f35; color: #f5eff7; padding: 14px 16px; border-radius: 4px; font-size: 14px;
-    opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none;
-  }
-  #snack.on { opacity: 1; transform: none; }
+  :root { --primary-inv:#cfbcff; --surface:#fef7ff; --on-surface:#1d1b20; --label:#49454f; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; margin:0; background:#000; font-family:Roboto, system-ui, sans-serif; overflow:hidden; }
+  #app { display:flex; flex-direction:column; height:100%; }
+  header { background:var(--primary-inv); color:var(--on-surface); height:56px; padding:0 4px 0 16px; padding-top:env(safe-area-inset-top,0px);
+    box-sizing:content-box; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  header h1 { font-size:22px; font-weight:400; margin:0; }
+  .icon-btn { background:none; border:0; width:48px; height:48px; border-radius:50%; cursor:pointer; color:var(--on-surface); display:grid; place-items:center; }
+  .icon-btn:active { background:rgba(0,0,0,.12); }
+  .icon-btn svg { width:24px; height:24px; fill:currentColor; }
+  #camera { position:relative; flex:1; min-height:0; overflow:hidden; touch-action:none; background:#000; }
+  video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform-origin:center; }
+  #zoom { position:absolute; z-index:2; top:12px; right:12px; background:rgba(0,0,0,.54); color:#fff; padding:4px 10px; border-radius:12px; font-size:14px; pointer-events:none; }
+  /* área de leitura maior: pega códigos menores/mais distantes */
+  #shade { position:absolute; inset:0; display:grid; pointer-events:none;
+    grid-template-columns:1fr min(94%,720px) 1fr; grid-template-rows:1fr min(46%,320px) 1fr; }
+  #shade > div { background:rgba(0,0,0,.45); }
+  #shade > #roi { background:transparent; position:relative; outline:2px solid rgba(255,255,255,.35); }
+  #roi i { position:absolute; width:26px; height:26px; border:4px solid #d0bcff; }
+  #roi i:nth-child(1){ left:-4px; top:-4px; border-right:0; border-bottom:0; }
+  #roi i:nth-child(2){ right:-4px; top:-4px; border-left:0; border-bottom:0; }
+  #roi i:nth-child(3){ left:-4px; bottom:-4px; border-right:0; border-top:0; }
+  #roi i:nth-child(4){ right:-4px; bottom:-4px; border-left:0; border-top:0; }
+  #erro { position:absolute; inset:0; display:none; align-items:center; justify-content:center; text-align:center; color:#fff; padding:24px; }
+  #painel { background:var(--surface); width:100%; flex-shrink:0; padding:16px; padding-bottom:calc(16px + env(safe-area-inset-bottom,0px)); display:flex; align-items:center; }
+  #painel .txt { flex:1; min-width:0; }
+  #label { font-size:12px; font-weight:500; letter-spacing:.5px; color:var(--on-surface); }
+  #valor { font-size:22px; margin-top:4px; color:var(--on-surface); user-select:text; -webkit-user-select:text; word-break:break-all; }
+  #painel .icon-btn { color:var(--label); }
+  #snack { position:fixed; left:16px; right:16px; bottom:calc(90px + env(safe-area-inset-bottom,0px)); background:#322f35; color:#f5eff7;
+    padding:14px 16px; border-radius:4px; font-size:14px; opacity:0; transform:translateY(8px); transition:.2s; pointer-events:none; }
+  #snack.on { opacity:1; transform:none; }
 </style>
 </head>
 <body>
@@ -69,14 +48,12 @@
       <svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
     </button>
   </header>
-
   <div id="camera">
     <video id="video" playsinline muted autoplay disablepictureinpicture></video>
     <div id="shade"><div></div><div></div><div></div><div></div><div id="roi"><i></i><i></i><i></i><i></i></div><div></div><div></div><div></div><div></div></div>
     <div id="zoom">Zoom 0%</div>
     <div id="erro"></div>
   </div>
-
   <div id="painel">
     <div class="txt">
       <div id="label">Aponte para um código de barras</div>
@@ -95,149 +72,106 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const video = $('video'), cam = $('camera');
+  const video = $('video'), cam = $('camera'), roiEl = $('roi');
 
   // ---------- Estado ----------
-  let zoom = 0.0, baseZoom = 0.0;          // 0.0 a 1.0, igual ao app Flutter
+  let zoom = 0, baseZoom = 0;
   let resultado = null, formato = null;
   let track = null, caps = {};
   let hwZoom = false, torchOn = false;
-  const DIGITAL_MAX = 4;                   // zoom digital máximo (quando a câmera não tem zoom por hardware)
+  const DIGITAL_MAX = 4;
+  let autoZoom = true, manualUntil = 0;       // zoom automático (varredura) quando nada é lido
 
-  // ---------- Leitores (todos os formatos) ----------
-  // Principal: zxing-wasm (zxing-cpp) rodando num Web Worker, fora da thread da tela,
-  // então a câmera não trava. Reserva: BarcodeDetector nativo e ZXing-js na thread principal.
+  // ---------- Leitores ----------
   const Z = window.ZXing;
-  const hints = new Map();
-  hints.set(Z.DecodeHintType.TRY_HARDER, true);
-  const zxing = new Z.MultiFormatReader();
-  zxing.setHints(hints);
+  const hints = new Map(); hints.set(Z.DecodeHintType.TRY_HARDER, true);
+  const zxing = new Z.MultiFormatReader(); zxing.setHints(hints);
 
   const WASM_URLS = [
     'https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.0/dist/es/reader/index.js',
     'https://cdn.jsdelivr.net/npm/zxing-wasm@2/reader/+esm',
     'https://esm.sh/zxing-wasm@2/reader'
   ];
-  const WASM_OPTS = { formats: [], tryHarder: true, tryRotate: true, tryInvert: true,
-                      tryDownscale: true, maxNumberOfSymbols: 1 };
+  const WASM_OPTS = { formats: [], tryHarder: true, tryRotate: true, tryInvert: true, tryDownscale: true, maxNumberOfSymbols: 1 };
 
-  // ----- código do worker (roda fora da thread da tela) -----
+  // ----- worker: recebe o recorte em resolução nativa e tenta em escala + filtros -----
   function workerMain(urls, opts) {
     let mod = null, cv = null, cx = null;
     const ready = (async () => {
-      for (const u of urls) {
-        try { const m = await import(u); if (m.readBarcodes) { mod = m; return true; } } catch (e) {}
-      }
+      for (const u of urls) { try { const m = await import(u); if (m.readBarcodes) { mod = m; return true; } } catch (e) {} }
       return false;
     })();
-
-    // ---- filtros de realce ----
-    const toGray = (d) => {
-      const n = d.width * d.height, g = new Uint8ClampedArray(n), px = d.data;
-      for (let i = 0, j = 0; i < n; i++, j += 4) g[i] = (px[j] * 77 + px[j + 1] * 150 + px[j + 2] * 29) >> 8;
-      return g;
-    };
-    const toImg = (g, w, h) => {
-      const d = new Uint8ClampedArray(w * h * 4);
+    const toGray = d => { const n = d.width * d.height, g = new Uint8ClampedArray(n), p = d.data;
+      for (let i = 0, j = 0; i < n; i++, j += 4) g[i] = (p[j] * 77 + p[j + 1] * 150 + p[j + 2] * 29) >> 8; return g; };
+    const toImg = (g, w, h) => { const d = new Uint8ClampedArray(w * h * 4);
       for (let i = 0, j = 0; i < g.length; i++, j += 4) { d[j] = d[j + 1] = d[j + 2] = g[i]; d[j + 3] = 255; }
-      return new ImageData(d, w, h);
-    };
-    // estica o contraste (ignora 1% mais escuro / 1% mais claro)
-    const stretch = (g) => {
+      return new ImageData(d, w, h); };
+    const stretch = g => {
       const hist = new Uint32Array(256); for (let i = 0; i < g.length; i++) hist[g[i]]++;
       const cut = g.length * 0.01; let lo = 0, hi = 255, acc = 0;
       for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc > cut) { lo = i; break; } }
-      acc = 0;
-      for (let i = 255; i >= 0; i--) { acc += hist[i]; if (acc > cut) { hi = i; break; } }
+      acc = 0; for (let i = 255; i >= 0; i--) { acc += hist[i]; if (acc > cut) { hi = i; break; } }
       if (hi - lo < 10) return g;
-      const out = new Uint8ClampedArray(g.length), k = 255 / (hi - lo);
-      for (let i = 0; i < g.length; i++) out[i] = (g[i] - lo) * k;
-      return out;
+      const o = new Uint8ClampedArray(g.length), k = 255 / (hi - lo);
+      for (let i = 0; i < g.length; i++) o[i] = (g[i] - lo) * k; return o;
     };
-    // nitidez (realça bordas das barras / módulos do QR)
-    const sharpen = (g, w, h) => {
+    // nitidez forte (unsharp): barras finas e distantes ficam mais definidas
+    const sharpen = (g, w, h, a) => {
       const o = new Uint8ClampedArray(g);
       for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
         const i = y * w + x;
-        o[i] = 5 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w];
-      }
-      return o;
+        o[i] = (1 + 4 * a) * g[i] - a * (g[i - 1] + g[i + 1] + g[i - w] + g[i + w]);
+      } return o;
     };
-    // suavização 3x3 (tira ruído e serrilhado da imagem pixelada)
     const blur = (g, w, h) => {
       const o = new Uint8ClampedArray(g);
       for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
         const i = y * w + x;
-        o[i] = (g[i - w - 1] + g[i - w] + g[i - w + 1] + g[i - 1] + g[i] + g[i + 1] + g[i + w - 1] + g[i + w] + g[i + w + 1]) / 9;
-      }
-      return o;
+        o[i] = (g[i-w-1]+g[i-w]+g[i-w+1]+g[i-1]+g[i]+g[i+1]+g[i+w-1]+g[i+w]+g[i+w+1]) / 9;
+      } return o;
     };
-    // binarização adaptativa (limiar local: funciona com sombra / luz desigual)
     const adaptive = (g, w, h, win, C) => {
       const W = w + 1, I = new Uint32Array(W * (h + 1));
-      for (let y = 0; y < h; y++) {
-        let row = 0;
-        for (let x = 0; x < w; x++) { row += g[y * w + x]; I[(y + 1) * W + x + 1] = I[y * W + x + 1] + row; }
-      }
+      for (let y = 0; y < h; y++) { let row = 0;
+        for (let x = 0; x < w; x++) { row += g[y * w + x]; I[(y + 1) * W + x + 1] = I[y * W + x + 1] + row; } }
       const r = win >> 1, o = new Uint8ClampedArray(g.length);
-      for (let y = 0; y < h; y++) {
-        const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
-        for (let x = 0; x < w; x++) {
-          const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
-          const sum = I[y1 * W + x1] - I[y0 * W + x1] - I[y1 * W + x0] + I[y0 * W + x0];
-          const mean = sum / ((x1 - x0) * (y1 - y0));
-          o[y * w + x] = g[y * w + x] < mean - C ? 0 : 255;
-        }
-      }
+      for (let y = 0; y < h; y++) { const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
+        for (let x = 0; x < w; x++) { const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
+          const sum = I[y1*W+x1] - I[y0*W+x1] - I[y1*W+x0] + I[y0*W+x0];
+          o[y*w+x] = g[y*w+x] < sum / ((x1-x0)*(y1-y0)) - C ? 0 : 255; } }
       return o;
     };
-    // binarização global (Otsu)
-    const otsu = (g) => {
+    const otsu = g => {
       const hist = new Uint32Array(256); for (let i = 0; i < g.length; i++) hist[g[i]]++;
       let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
       let sB = 0, wB = 0, best = 0, th = 128;
-      for (let t = 0; t < 256; t++) {
-        wB += hist[t]; if (!wB) continue;
-        const wF = g.length - wB; if (!wF) break;
-        sB += t * hist[t];
-        const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF);
-        if (v > best) { best = v; th = t; }
-      }
-      const o = new Uint8ClampedArray(g.length);
-      for (let i = 0; i < g.length; i++) o[i] = g[i] > th ? 255 : 0;
-      return o;
+      for (let t = 0; t < 256; t++) { wB += hist[t]; if (!wB) continue; const wF = g.length - wB; if (!wF) break;
+        sB += t * hist[t]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF);
+        if (v > best) { best = v; th = t; } }
+      const o = new Uint8ClampedArray(g.length); for (let i = 0; i < g.length; i++) o[i] = g[i] > th ? 255 : 0; return o;
     };
-
-    const tryRead = async (img) => {
-      const r = await mod.readBarcodes(img, opts);
-      return r.find(x => x.text && x.isValid !== false) || null;
-    };
+    const tryRead = async img => { const r = await mod.readBarcodes(img, opts); return r.find(x => x.text && x.isValid !== false) || null; };
 
     onmessage = async (e) => {
-      const { id, bitmap } = e.data;
+      const { id, bitmap, scale } = e.data;
       try {
         if (!(await ready)) { bitmap.close(); postMessage({ id, error: 'nowasm' }); return; }
-        const w = bitmap.width, h = bitmap.height;
-        if (!cv || cv.width !== w || cv.height !== h) {
-          cv = new OffscreenCanvas(w, h);
-          cx = cv.getContext('2d', { willReadFrequently: true });
-        }
-        cx.drawImage(bitmap, 0, 0); bitmap.close();
+        const w = Math.max(16, Math.round(bitmap.width * scale)), h = Math.max(16, Math.round(bitmap.height * scale));
+        if (!cv || cv.width !== w || cv.height !== h) { cv = new OffscreenCanvas(w, h); cx = cv.getContext('2d', { willReadFrequently: true }); }
+        cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+        cx.drawImage(bitmap, 0, 0, w, h); bitmap.close();
         const raw = cx.getImageData(0, 0, w, h);
 
-        // 1) imagem ampliada, sem filtro
-        let b = await tryRead(raw);
-        // 2) contraste + nitidez
+        let b = await tryRead(raw);                                   // 1) sem filtro
         if (!b) {
-          const g = stretch(toGray(raw));
-          b = await tryRead(toImg(sharpen(g, w, h), w, h));
-          // 3) suavizar + limiar adaptativo (QR de baixa qualidade, sombra, serrilhado)
+          const g = stretch(toGray(raw));                             // 2) contraste + nitidez
+          b = await tryRead(toImg(sharpen(g, w, h, 0.6), w, h));
+          if (!b) b = await tryRead(toImg(sharpen(g, w, h, 1.2), w, h)); // 3) nitidez forte (código longe/borrado)
           if (!b) {
-            const sm = blur(g, w, h);
+            const sm = blur(g, w, h);                                 // 4) limiar adaptativo
             let win = Math.max(25, Math.round(Math.min(w, h) / 5)); if (win % 2 === 0) win++;
             b = await tryRead(toImg(adaptive(sm, w, h, win, 6), w, h));
-            // 4) limiar global (Otsu)
-            if (!b) b = await tryRead(toImg(otsu(sm), w, h));
+            if (!b) b = await tryRead(toImg(otsu(sm), w, h));         // 5) Otsu
           }
         }
         postMessage({ id, r: b ? { valor: b.text, formato: b.format } : null });
@@ -245,21 +179,15 @@
     };
   }
 
-  // nomes de formato iguais aos do Flutter
-  const FLUTTER_FMT = { qrcode: 'qrCode', microqrcode: 'microQrCode', upca: 'upcA', upce: 'upcE',
-    datamatrix: 'dataMatrix', databar: 'dataBar', databarexpanded: 'dataBarExpanded', rmqrcode: 'rmqrCode' };
-  const fmtName = n => {
-    const k = String(n).toLowerCase().replace(/[^a-z0-9]/g, '');
-    return FLUTTER_FMT[k] || k;
-  };
+  const FLUTTER_FMT = { qrcode:'qrCode', microqrcode:'microQrCode', upca:'upcA', upce:'upcE', datamatrix:'dataMatrix',
+    databar:'dataBar', databarexpanded:'dataBarExpanded', rmqrcode:'rmqrCode' };
+  const fmtName = n => { const k = String(n).toLowerCase().replace(/[^a-z0-9]/g, ''); return FLUTTER_FMT[k] || k; };
 
   let worker = null, workerOk = false, jobId = 0;
   const pendentes = new Map();
-  let wasm = null;                       // reserva na thread principal
+  let wasm = null;
   async function initWasmMain() {
-    for (const u of WASM_URLS) {
-      try { const m = await import(u); if (m.readBarcodes) { wasm = m; return; } } catch (e) {}
-    }
+    for (const u of WASM_URLS) { try { const m = await import(u); if (m.readBarcodes) { wasm = m; return; } } catch (e) {} }
   }
   function falhaWorker() {
     workerOk = false;
@@ -271,82 +199,84 @@
     try {
       const src = `(${workerMain.toString()})(${JSON.stringify(WASM_URLS)}, ${JSON.stringify(WASM_OPTS)})`;
       worker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
-      worker.onmessage = (e) => {
-        const { id, r, error } = e.data;
-        const res = pendentes.get(id);
+      worker.onmessage = e => {
+        const { id, r, error } = e.data; const res = pendentes.get(id);
         if (error === 'nowasm') return falhaWorker();
         if (res) { pendentes.delete(id); res(r ? { valor: r.valor, formato: fmtName(r.formato) } : null); }
       };
-      worker.onerror = falhaWorker;
-      workerOk = true;
+      worker.onerror = falhaWorker; workerOk = true;
     } catch (e) { falhaWorker(); }
   }
 
   let nativeDetector = null;
   async function initNative() {
     if (!('BarcodeDetector' in window)) return;
-    try {
-      nativeDetector = new BarcodeDetector({ formats: await BarcodeDetector.getSupportedFormats() });
-    } catch (e) { nativeDetector = null; }
+    try { nativeDetector = new BarcodeDetector({ formats: await BarcodeDetector.getSupportedFormats() }); } catch (e) { nativeDetector = null; }
   }
 
-  // ---------- Área de leitura: SÓ o que está dentro da caixa central ----------
-  const roiEl = $('roi');
+  // ---------- Recorte (sempre em pixels REAIS do vídeo, sem ampliar à toa) ----------
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-  function roiVideoRect() {
+  function videoRect(el) {
     const vw = video.videoWidth, vh = video.videoHeight;
-    const cr = cam.getBoundingClientRect(), rr = roiEl.getBoundingClientRect();
+    const cr = cam.getBoundingClientRect(), rr = el.getBoundingClientRect();
     if (!vw || !vh || !cr.width) return null;
-    const s = Math.max(cr.width / vw, cr.height / vh);            // object-fit: cover
-    const f = hwZoom ? 1 : 1 + zoom * (DIGITAL_MAX - 1);          // zoom digital (CSS scale)
-    const conv = (x, y) => [
-      vw / 2 + ((x - cr.left - cr.width / 2) / f) / s,
-      vh / 2 + ((y - cr.top - cr.height / 2) / f) / s
-    ];
+    const s = Math.max(cr.width / vw, cr.height / vh);
+    const f = hwZoom ? 1 : 1 + zoom * (DIGITAL_MAX - 1);
+    const conv = (x, y) => [vw / 2 + ((x - cr.left - cr.width / 2) / f) / s, vh / 2 + ((y - cr.top - cr.height / 2) / f) / s];
     let [x0, y0] = conv(rr.left, rr.top), [x1, y1] = conv(rr.right, rr.bottom);
     x0 = Math.max(0, Math.round(x0)); y0 = Math.max(0, Math.round(y0));
     x1 = Math.min(vw, Math.round(x1)); y1 = Math.min(vh, Math.round(y1));
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   }
-  // fator de escala: amplia se a caixa for pequena na imagem, limita se for enorme
-  const fatorEscala = (r) => { const m = Math.max(r.w, r.h); return m < 1400 ? Math.min(4, 1400 / m) : Math.min(1, 1800 / m); };
 
-  function roiToCanvas(r) {
-    const k = fatorEscala(r);
-    canvas.width = Math.round(r.w * k); canvas.height = Math.round(r.h * k);
-    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
-  }
+  // Leitura em múltiplas escalas, alternando a cada ciclo:
+  //  - caixa central em tamanho nativo (melhor qualidade)
+  //  - caixa central reduzida (pega código borrado / com moiré)
+  //  - quadro inteiro reduzido (código fora da caixa)
+  //  - caixa central ampliada, só se o recorte for pequeno (código minúsculo)
+  const PASSOS = [
+    { full: false, s: 1 },
+    { full: false, s: 0.6 },
+    { full: true,  s: 0.7 },
+    { full: false, s: 1 },
+    { full: false, s: 1.6 },
+    { full: false, s: 0.4 }
+  ];
+  let passo = 0;
+  const MAX_NATIVO = 2400;    // lado máximo enviado ao leitor (sem upscale: no máximo o nativo)
 
   async function lerFrame() {
     if (!video.videoWidth) return null;
-    const r = roiVideoRect();
+    const p = PASSOS[passo++ % PASSOS.length];
+    const r = videoRect(p.full ? cam : roiEl);
     if (!r || r.w < 8 || r.h < 8) return null;
+    const m = Math.max(r.w, r.h);
+    const base = m > MAX_NATIVO ? MAX_NATIVO / m : 1;       // só reduz se for enorme
+    if (p.s > 1 && m * base > 1300) return null;           // ampliar só quando o recorte é pequeno
+    const bw = Math.round(r.w * base), bh = Math.round(r.h * base);
 
-    // 1) Worker (não trava a tela)
     if (workerOk) {
       let bmp;
-      try {
-        const k = fatorEscala(r);
-        bmp = await createImageBitmap(video, r.x, r.y, r.w, r.h, {
-          resizeWidth: Math.round(r.w * k), resizeHeight: Math.round(r.h * k), resizeQuality: 'high'
-        });
-      } catch (e) {
-        roiToCanvas(r);
+      try { bmp = await createImageBitmap(video, r.x, r.y, r.w, r.h, { resizeWidth: bw, resizeHeight: bh, resizeQuality: 'high' }); }
+      catch (e) {
+        canvas.width = bw; canvas.height = bh;
+        ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, bw, bh);
         try { bmp = await createImageBitmap(canvas); } catch (e2) { return null; }
       }
       return new Promise(res => {
         const id = ++jobId;
         const t = setTimeout(() => { if (pendentes.delete(id)) res(null); }, 8000);
         pendentes.set(id, v => { clearTimeout(t); res(v); });
-        worker.postMessage({ id, bitmap: bmp }, [bmp]);
+        worker.postMessage({ id, bitmap: bmp, scale: p.s }, [bmp]);
       });
     }
 
-    // 2) Reserva na thread principal
-    roiToCanvas(r);
+    // reserva na thread principal
+    canvas.width = Math.round(bw * p.s); canvas.height = Math.round(bh * p.s);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
     if (wasm) {
       try {
         const res = await wasm.readBarcodes(ctx.getImageData(0, 0, canvas.width, canvas.height), WASM_OPTS);
@@ -355,60 +285,38 @@
       } catch (e) { wasm = null; }
     }
     if (nativeDetector) {
-      try {
-        const d = await nativeDetector.detect(canvas);
+      try { const d = await nativeDetector.detect(canvas);
         for (const b of d) if (b.rawValue) return { valor: b.rawValue, formato: fmtName(b.format) };
-        return null;
-      } catch (e) { nativeDetector = null; }
+        return null; } catch (e) { nativeDetector = null; }
     }
     try {
       const lum = new Z.HTMLCanvasElementLuminanceSource(canvas);
       const res = zxing.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(lum)));
       const t = res.getText();
       if (t) return { valor: t, formato: fmtName(Z.BarcodeFormat[res.getBarcodeFormat()]) };
-    } catch (e) { /* NotFound */ }
+    } catch (e) {}
     return null;
   }
 
-  // ---------- Detecção (equivale ao onDetect) ----------
-  // Precisão: só aceita um código novo depois de lê-lo 2 vezes iguais em até 1,5 s,
-  // o que elimina leituras erradas ocasionais.
+  // ---------- Detecção (2 leituras iguais em 1,5 s) ----------
   let pend = { v: null, t: 0 };
+  let lastActivity = performance.now();
   function onDetect(valor, fmt) {
     if (!valor) return;
+    lastActivity = performance.now();            // viu algo: segura o zoom atual
     if (valor === resultado) { pend.v = null; return; }
     const agora = performance.now();
     if (pend.v === valor && agora - pend.t < 1500) {
       pend.v = null;
-      if (navigator.vibrate) navigator.vibrate(200);   // vibra ao ler um código novo
-      resultado = valor; formato = fmt;
-      render();
-    } else {
-      pend = { v: valor, t: agora };
-    }
-  }
-
-  // ~8 análises por segundo, só da área central, fora da thread principal.
-  const INTERVALO_MS = 120;
-  let busy = false, last = 0;
-  async function processar() {
-    busy = true;
-    try {
-      const r = await lerFrame();
-      if (r) onDetect(r.valor, r.formato);
-    } finally { busy = false; }
-  }
-  function loop(ts) {
-    const agora = ts || performance.now();
-    if (!busy && agora - last >= INTERVALO_MS) { last = agora; processar(); }
-    if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop);
-    else requestAnimationFrame(loop);
+      if (navigator.vibrate) navigator.vibrate(200);
+      resultado = valor; formato = fmt; render();
+    } else pend = { v: valor, t: agora };
   }
 
   // ---------- Zoom ----------
-  function setZoom(novo) {
+  function setZoom(novo, auto) {
     const z = Math.min(1, Math.max(0, novo));
-    if (z === zoom) return;
+    if (z === zoom && !auto) return;
     zoom = z;
     if (hwZoom && track) {
       const { min, max } = caps.zoom;
@@ -416,45 +324,51 @@
     } else {
       video.style.transform = `scale(${1 + z * (DIGITAL_MAX - 1)})`;
     }
-    $('zoom').textContent = `Zoom ${Math.round(zoom * 100)}%`;
+    $('zoom').textContent = `Zoom ${Math.round(zoom * 100)}%` + (autoZoom && auto ? ' · auto' : '');
   }
 
-  // gesto de pinça (onScaleStart / onScaleUpdate)
-  const ptrs = new Map();
-  let startDist = 0;
+  // Zoom inteligente: se nada é lido por ~1,8 s, sobe o zoom (óptico/hardware quando existe)
+  // em degraus e volta ao início, refocando a cada passo. Pinça manual pausa por 8 s.
+  const DEGRAUS = hwZ => hwZ ? [0, 0.12, 0.25, 0.4, 0.55, 0.7] : [0, 0.2, 0.4, 0.6];
+  let degrau = 0;
+  function varrerZoom(agora) {
+    if (!autoZoom || agora < manualUntil || ptrs.size) return;
+    if (agora - lastActivity < 1800) return;
+    const d = DEGRAUS(hwZoom);
+    degrau = (degrau + 1) % d.length;
+    setZoom(d[degrau], true);
+    lastActivity = agora;
+    setTimeout(refocar, 250);
+  }
+
+  const ptrs = new Map(); let startDist = 0;
   const dist = () => { const [a, b] = [...ptrs.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
   cam.addEventListener('pointerdown', e => {
-    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    cam.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); cam.setPointerCapture(e.pointerId);
     if (ptrs.size === 2) { startDist = dist(); baseZoom = zoom; }
   });
   cam.addEventListener('pointermove', e => {
     if (!ptrs.has(e.pointerId)) return;
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (ptrs.size === 2 && startDist > 0) {
-      const scale = dist() / startDist;
-      setZoom(baseZoom + (scale - 1) * 0.35);
-    }
+    if (ptrs.size === 2 && startDist > 0) { manualUntil = performance.now() + 8000; setZoom(baseZoom + (dist() / startDist - 1) * 0.35); }
   });
   const up = e => { ptrs.delete(e.pointerId); startDist = 0; };
-  cam.addEventListener('pointerup', up);
-  cam.addEventListener('pointercancel', up);
-  // scroll do mouse (desktop)
-  cam.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom - Math.sign(e.deltaY) * 0.05); }, { passive: false });
+  cam.addEventListener('pointerup', up); cam.addEventListener('pointercancel', up);
+  cam.addEventListener('wheel', e => { e.preventDefault(); manualUntil = performance.now() + 8000; setZoom(zoom - Math.sign(e.deltaY) * 0.05); }, { passive: false });
 
-  // toque rápido = refoca (ajuda a ler de mais longe)
-  cam.addEventListener('click', async () => {
+  // ---------- Foco ----------
+  async function refocar() {
     if (!track || !caps.focusMode) return;
     try {
       if (caps.focusMode.includes('single-shot')) {
         await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
-        setTimeout(() => {
-          if (caps.focusMode.includes('continuous'))
-            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
-        }, 1500);
+        setTimeout(() => { if (caps.focusMode.includes('continuous')) track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}); }, 1200);
+      } else if (caps.focusMode.includes('continuous')) {
+        await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
       }
     } catch (e) {}
-  });
+  }
+  cam.addEventListener('click', refocar);                 // toque = refoca
 
   // ---------- Lanterna ----------
   $('btnFlash').onclick = async () => {
@@ -464,7 +378,7 @@
     catch (e) { torchOn = !torchOn; snack('Não foi possível acionar a lanterna'); }
   };
 
-  // ---------- Painel de resultado ----------
+  // ---------- Painel ----------
   function render() {
     $('label').textContent = resultado == null ? 'Aponte para um código de barras' : `Código lido (${formato || ''})`;
     $('valor').textContent = resultado ?? '—';
@@ -473,39 +387,61 @@
   $('btnLimpar').onclick = () => { resultado = null; formato = null; render(); };
   $('btnCopiar').onclick = async () => {
     try { await navigator.clipboard.writeText(resultado); }
-    catch (e) {
-      const t = document.createElement('textarea'); t.value = resultado; document.body.appendChild(t);
-      t.select(); document.execCommand('copy'); t.remove();
-    }
+    catch (e) { const t = document.createElement('textarea'); t.value = resultado; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
     snack('Copiado!');
   };
-
   let snackT;
-  function snack(msg) {
-    const s = $('snack'); s.textContent = msg; s.classList.add('on');
-    clearTimeout(snackT); snackT = setTimeout(() => s.classList.remove('on'), 2000);
+  function snack(msg) { const s = $('snack'); s.textContent = msg; s.classList.add('on'); clearTimeout(snackT); snackT = setTimeout(() => s.classList.remove('on'), 2000); }
+
+  // ---------- Loop (~10 análises/s, fora da thread da tela) ----------
+  const INTERVALO_MS = 100;
+  let busy = false, last = 0;
+  async function processar() {
+    busy = true;
+    try { const r = await lerFrame(); if (r) onDetect(r.valor, r.formato); } finally { busy = false; }
+  }
+  function loop(ts) {
+    const agora = ts || performance.now();
+    if (!busy && agora - last >= INTERVALO_MS) { last = agora; processar(); varrerZoom(performance.now()); }
+    if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop);
+    else requestAnimationFrame(loop);
   }
 
-  // ---------- Câmera ----------
+  // ---------- Câmera: resolução máxima, foco/exposição contínuos ----------
   async function start() {
     await initNative();
-    initWorker(); // zxing-wasm em Web Worker (carrega em segundo plano)
+    initWorker();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 4096 }, height: { ideal: 3072 }, frameRate: { ideal: 30 } },
         audio: false
       });
       video.srcObject = stream;
       await video.play();
       track = stream.getVideoTracks()[0];
       caps = track.getCapabilities ? track.getCapabilities() : {};
+
+      // pede o máximo que o aparelho entrega (limitado a 4096x3072 p/ não pesar)
+      try {
+        if (caps.width && caps.height) {
+          await track.applyConstraints({
+            width: { ideal: Math.min(caps.width.max, 4096) },
+            height: { ideal: Math.min(caps.height.max, 3072) }
+          });
+        }
+      } catch (e) {}
+
       hwZoom = !!(caps.zoom && caps.zoom.max > caps.zoom.min);
-      // foco contínuo, se suportado
-      if (caps.focusMode && caps.focusMode.includes('continuous')) {
-        const adv = { focusMode: 'continuous' };
-        if (caps.pointsOfInterest) adv.pointsOfInterest = [{ x: 0.5, y: 0.5 }];  // foco no centro
-        track.applyConstraints({ advanced: [adv] }).catch(() => {});
-      }
+
+      // foco contínuo no centro + exposição e balanço de branco contínuos
+      const adv = {};
+      if (caps.focusMode && caps.focusMode.includes('continuous')) adv.focusMode = 'continuous';
+      if (caps.pointsOfInterest) adv.pointsOfInterest = [{ x: 0.5, y: 0.5 }];
+      if (caps.exposureMode && caps.exposureMode.includes('continuous')) adv.exposureMode = 'continuous';
+      if (caps.whiteBalanceMode && caps.whiteBalanceMode.includes('continuous')) adv.whiteBalanceMode = 'continuous';
+      if (Object.keys(adv).length) track.applyConstraints({ advanced: [adv] }).catch(() => {});
+
+      setZoom(0, true);
       loop();
     } catch (e) {
       const el = $('erro'); el.style.display = 'flex';
