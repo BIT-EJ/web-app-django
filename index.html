@@ -213,88 +213,6 @@
       return r.find(x => x.text && x.isValid !== false) || null;
     };
 
-    // ---- foco no PRETO ----
-    // Canal "valor" = max(R,G,B): preto fica ~0 e qualquer cor de fundo (vermelho, verde,
-    // azul, amarelo...) fica clara. Barras pretas viram o único escuro da imagem.
-    const toV = (d) => {
-      const n = d.width * d.height, g = new Uint8ClampedArray(n), px = d.data;
-      for (let i = 0, j = 0; i < n; i++, j += 4) {
-        const r = px[j], gg = px[j + 1], b = px[j + 2];
-        g[i] = r > gg ? (r > b ? r : b) : (gg > b ? gg : b);
-      }
-      return g;
-    };
-    const oddWin = (w, h) => { let win = Math.max(25, Math.round(Math.min(w, h) / 5)); return win % 2 ? win : win + 1; };
-
-    // Localiza onde está o código de barras dentro da caixa: região com muitos "degraus"
-    // de claro/escuro numa direção só (barras). Serve para código distante e pequeno.
-    const locate = (v, w, h) => {
-      const d = Math.max(1, Math.floor(Math.max(w, h) / 480));
-      const sw = Math.floor(w / d), sh = Math.floor(h / d);
-      if (sw < 32 || sh < 16) return null;
-      const sm = new Uint8ClampedArray(sw * sh);
-      for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
-        let t = 0; for (let j = 0; j < d; j++) for (let i = 0; i < d; i++) t += v[(y * d + j) * w + x * d + i];
-        sm[y * sw + x] = t / (d * d);
-      }
-      const B = 8, bw = Math.ceil(sw / B), bh = Math.ceil(sh / B);
-      const sx = new Float32Array(bw * bh), sy = new Float32Array(bw * bh);
-      for (let y = 1; y < sh - 1; y++) for (let x = 1; x < sw - 1; x++) {
-        const k = ((y / B) | 0) * bw + ((x / B) | 0);
-        sx[k] += Math.abs(sm[y * sw + x + 1] - sm[y * sw + x - 1]);
-        sy[k] += Math.abs(sm[(y + 1) * sw + x] - sm[(y - 1) * sw + x]);
-      }
-      let best = null;
-      for (const vert of [true, false]) {                    // barras verticais ou código girado
-        const sc = new Float32Array(bw * bh); let mx = 0;
-        for (let k = 0; k < sc.length; k++) { sc[k] = vert ? sx[k] - sy[k] : sy[k] - sx[k]; if (sc[k] > mx) mx = sc[k]; }
-        if (mx < B * B * 8) continue;                        // quase sem gradiente: nada a achar
-        const thr = Math.max(mx * 0.25, B * B * 4), seen = new Uint8Array(sc.length);
-        for (let s0 = 0; s0 < sc.length; s0++) {
-          if (seen[s0] || sc[s0] < thr) continue;
-          let tot = 0, x0 = bw, y0 = bh, x1 = 0, y1 = 0; const q = [s0]; seen[s0] = 1;
-          while (q.length) {
-            const k = q.pop(), cx_ = k % bw, cy_ = (k / bw) | 0; tot += sc[k];
-            if (cx_ < x0) x0 = cx_; if (cx_ > x1) x1 = cx_; if (cy_ < y0) y0 = cy_; if (cy_ > y1) y1 = cy_;
-            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-              const nx = cx_ + dx, ny = cy_ + dy; if (nx < 0 || ny < 0 || nx >= bw || ny >= bh) continue;
-              const nk = ny * bw + nx; if (!seen[nk] && sc[nk] >= thr) { seen[nk] = 1; q.push(nk); }
-            }
-          }
-          if (!best || tot > best.tot) best = { tot, x0, y0, x1, y1 };
-        }
-      }
-      if (!best) return null;
-      const f = B * d;
-      let x = best.x0 * f, y = best.y0 * f, cw = (best.x1 - best.x0 + 1) * f, ch = (best.y1 - best.y0 + 1) * f;
-      const px_ = Math.max(12, cw * 0.25), py_ = Math.max(12, ch * 0.35);
-      x = Math.max(0, x - px_); y = Math.max(0, y - py_);
-      cw = Math.min(w - x, cw + 2 * px_); ch = Math.min(h - y, ch + 2 * py_);
-      if (cw < 40 || ch < 20 || (cw * ch) > 0.85 * w * h) return null;   // não ajuda se já é quase tudo
-      return { x: Math.round(x), y: Math.round(y), w: Math.round(cw), h: Math.round(ch) };
-    };
-
-    let cv2 = null, cx2 = null;
-    const cut = (x, y, cw, ch) => {           // recorta e amplia (até 6x) a região do código
-      const k = Math.max(1, Math.min(6, 1600 / Math.max(cw, ch)));
-      const tw = Math.round(cw * k), th = Math.round(ch * k);
-      if (!cv2) { cv2 = new OffscreenCanvas(tw, th); cx2 = cv2.getContext('2d', { willReadFrequently: true }); }
-      cv2.width = tw; cv2.height = th;
-      cx2.imageSmoothingEnabled = true; cx2.imageSmoothingQuality = 'high';
-      cx2.drawImage(cv, x, y, cw, ch, 0, 0, tw, th);
-      return cx2.getImageData(0, 0, tw, th);
-    };
-
-    // variações de realce em cima de um canal (preto = barras)
-    const variantes = async (v, w, h) => {
-      const g = stretch(v);
-      let b = await tryRead(toImg(sharpen(g, w, h), w, h)); if (b) return b;
-      const sm = blur(g, w, h), win = oddWin(w, h);
-      b = await tryRead(toImg(adaptive(sm, w, h, win, 6), w, h)); if (b) return b;
-      b = await tryRead(toImg(adaptive(g, w, h, win, 12), w, h)); if (b) return b;
-      return await tryRead(toImg(otsu(sm), w, h));
-    };
-
     onmessage = async (e) => {
       const { id, bitmap } = e.data;
       try {
@@ -309,21 +227,17 @@
 
         // 1) imagem ampliada, sem filtro
         let b = await tryRead(raw);
+        // 2) contraste + nitidez
         if (!b) {
-          const v = toV(raw);
-          // 2) acha o código dentro da caixa, recorta e amplia mais (código longe)
-          const loc = locate(v, w, h);
-          if (loc) {
-            const crop = cut(loc.x, loc.y, loc.w, loc.h);
-            b = await tryRead(crop);
-            if (!b) b = await variantes(toV(crop), crop.width, crop.height);
-          }
-          // 3) caixa inteira olhando só o preto (fundo colorido some)
-          if (!b) b = await variantes(v, w, h);
-          // 4) último recurso: luminância comum (QR de baixa qualidade)
+          const g = stretch(toGray(raw));
+          b = await tryRead(toImg(sharpen(g, w, h), w, h));
+          // 3) suavizar + limiar adaptativo (QR de baixa qualidade, sombra, serrilhado)
           if (!b) {
-            const g = blur(stretch(toGray(raw)), w, h);
-            b = await tryRead(toImg(adaptive(g, w, h, oddWin(w, h), 6), w, h));
+            const sm = blur(g, w, h);
+            let win = Math.max(25, Math.round(Math.min(w, h) / 5)); if (win % 2 === 0) win++;
+            b = await tryRead(toImg(adaptive(sm, w, h, win, 6), w, h));
+            // 4) limiar global (Otsu)
+            if (!b) b = await tryRead(toImg(otsu(sm), w, h));
           }
         }
         postMessage({ id, r: b ? { valor: b.text, formato: b.format } : null });
