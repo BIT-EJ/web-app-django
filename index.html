@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Leitor de Código</title>
 
   <style>
@@ -42,6 +42,9 @@
       align-items: center;
       justify-content: center;
       position: relative;
+      /* Impede que o navegador dê zoom na página inteira ao fazer pinça na câmera */
+      touch-action: none;
+      user-select: none;
     }
 
     video, canvas {
@@ -50,6 +53,7 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
+      transform-origin: center center;
     }
 
     canvas {
@@ -61,6 +65,22 @@
       font-size: 14px;
       z-index: 1;
       pointer-events: none;
+    }
+
+    #zoom-badge {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      background: rgba(0, 0, 0, 0.65);
+      color: #00ff88;
+      border: 1px solid rgba(0, 255, 136, 0.4);
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: bold;
+      z-index: 2;
+      pointer-events: none;
+      display: none;
     }
 
     .result {
@@ -131,10 +151,11 @@
 
   <h1>Leitor de Código</h1>
 
-  <div class="scanner-box">
+  <div class="scanner-box" id="scanner-box">
     <span class="placeholder-text" id="placeholder">Câmera desligada</span>
     <video id="camera" autoplay muted playsinline></video>
     <canvas id="overlay"></canvas>
+    <span id="zoom-badge">1.0x</span>
   </div>
 
   <div class="result">
@@ -147,12 +168,13 @@
   <button id="action-btn">Iniciar Câmera</button>
 
   <script type="module">
-    // Motor ZXing compilado em WebAssembly (mesmo motor C++ usado em apps nativos)
     import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es/pure.min.js';
 
+    const scannerBox = document.getElementById('scanner-box');
     const video = document.getElementById('camera');
     const canvas = document.getElementById('overlay');
     const ctx = canvas.getContext('2d');
+    const zoomBadge = document.getElementById('zoom-badge');
     const actionBtn = document.getElementById('action-btn');
     const barcodeEl = document.getElementById('barcode');
     const statusEl = document.getElementById('status');
@@ -173,8 +195,69 @@
     });
 
     let stream = null;
+    let videoTrack = null;
     let isScanning = false;
     let scanTimer = null;
+
+    // Variáveis de controle do Zoom (Pinça)
+    let supportsHardwareZoom = false;
+    let minZoom = 1;
+    let maxZoom = 5;
+    let currentZoom = 1;
+    let initialPinchDistance = 0;
+    let initialZoomAtPinch = 1;
+    let isApplyingZoom = false;
+
+    function getTouchDistance(touches) {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.hypot(dx, dy);
+    }
+
+    async function setZoomLevel(newZoom) {
+      currentZoom = Math.min(Math.max(newZoom, minZoom), maxZoom);
+      zoomBadge.textContent = `${currentZoom.toFixed(1)}x`;
+
+      if (supportsHardwareZoom && videoTrack) {
+        if (isApplyingZoom) return;
+        isApplyingZoom = true;
+        try {
+          await videoTrack.applyConstraints({
+            advanced: [{ zoom: currentZoom }]
+          });
+        } catch (e) {
+          console.warn('Falha ao aplicar zoom de hardware:', e);
+        } finally {
+          isApplyingZoom = false;
+        }
+      } else {
+        // Fallback: Zoom visual via CSS caso a câmera não exponha zoom físico
+        video.style.transform = `scale(${currentZoom})`;
+        canvas.style.transform = `scale(${currentZoom})`;
+      }
+    }
+
+    // Eventos de toque para movimento de pinça (2 dedos)
+    scannerBox.addEventListener('touchstart', (e) => {
+      if (!isScanning || e.touches.length !== 2) return;
+      e.preventDefault();
+      initialPinchDistance = getTouchDistance(e.touches);
+      initialZoomAtPinch = currentZoom;
+    }, { passive: false });
+
+    scannerBox.addEventListener('touchmove', (e) => {
+      if (!isScanning || e.touches.length !== 2 || initialPinchDistance === 0) return;
+      e.preventDefault();
+      const currentDistance = getTouchDistance(e.touches);
+      const scaleFactor = currentDistance / initialPinchDistance;
+      setZoomLevel(initialZoomAtPinch * scaleFactor);
+    }, { passive: false });
+
+    scannerBox.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) {
+        initialPinchDistance = 0;
+      }
+    });
 
     function clearOverlay() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -211,7 +294,11 @@
         stream = null;
       }
 
+      videoTrack = null;
       video.srcObject = null;
+      video.style.transform = 'scale(1)';
+      canvas.style.transform = 'scale(1)';
+      zoomBadge.style.display = 'none';
       clearOverlay();
       placeholderEl.style.display = 'block';
 
@@ -228,22 +315,18 @@
       }
 
       try {
-        // Analisa 100% do frame da câmera sem exigir centralização
         const barcodes = await detector.detect(video);
 
         if (barcodes.length > 0 && isScanning) {
           const found = barcodes[0];
 
-          // Desenha o contorno verde exatamente onde o código foi achado na tela
           drawBoundingBox(found.cornerPoints);
-
           barcodeEl.textContent = found.rawValue;
 
           if (navigator.vibrate) {
             navigator.vibrate(100);
           }
 
-          // Pequena pausa visual de 250ms para ver o contorno verde no código antes de fechar
           isScanning = false;
           setTimeout(() => {
             stopScanner(`Código lido (${found.format.toUpperCase()})!`);
@@ -260,7 +343,6 @@
     }
 
     async function getBestCameraStream() {
-      // Pede Full HD (1080p) para permitir leitura a longa distância
       const highResConstraints = {
         audio: false,
         video: {
@@ -297,23 +379,38 @@
         video.srcObject = stream;
         await video.play();
 
-        // Ativa foco contínuo e zoom leve (1.5x) se o aparelho suportar, ajudando na leitura de longe
-        const track = stream.getVideoTracks()[0];
-        if (track && track.getCapabilities && track.applyConstraints) {
-          const caps = track.getCapabilities();
+        videoTrack = stream.getVideoTracks()[0];
+        supportsHardwareZoom = false;
+        minZoom = 1;
+        maxZoom = 4;
+        currentZoom = 1;
+
+        if (videoTrack && videoTrack.getCapabilities) {
+          const caps = videoTrack.getCapabilities();
           const advanced = [];
 
           if (caps.focusMode && caps.focusMode.includes('continuous')) {
             advanced.push({ focusMode: 'continuous' });
           }
 
+          // Verifica suporte nativo da lente ao zoom
+          if (caps.zoom) {
+            supportsHardwareZoom = true;
+            minZoom = caps.zoom.min || 1;
+            maxZoom = Math.min(caps.zoom.max || 5, 8); // Limita a 8x para não perder foco
+            currentZoom = minZoom;
+          }
+
           if (advanced.length > 0) {
-            track.applyConstraints({ advanced }).catch(() => {});
+            videoTrack.applyConstraints({ advanced }).catch(() => {});
           }
         }
 
+        zoomBadge.textContent = `${currentZoom.toFixed(1)}x`;
+        zoomBadge.style.display = 'block';
+
         isScanning = true;
-        statusEl.textContent = 'Aponte a câmera para o código (qualquer posição)...';
+        statusEl.textContent = 'Aponte para o código (faça pinça na tela para zoom)...';
         actionBtn.textContent = 'Parar Câmera';
         actionBtn.classList.add('stop-mode');
         actionBtn.disabled = false;
