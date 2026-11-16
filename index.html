@@ -44,7 +44,6 @@
     video {
       width: 100%;
       display: block;
-      object-fit: cover;
     }
 
     .scan-line {
@@ -122,14 +121,6 @@
       background: #353943;
       color: white;
     }
-
-    .hint {
-      margin-top: 20px;
-      max-width: 450px;
-      color: #888;
-      font-size: 13px;
-      line-height: 1.6;
-    }
   </style>
 </head>
 
@@ -155,12 +146,6 @@
     <button id="clear">Limpar</button>
   </div>
 
-  <p class="hint">
-    Posicione o código na frente da câmera.
-    Mantenha o código visível e bem iluminado.
-    O leitor identificará automaticamente.
-  </p>
-
   <script type="module">
 
     import {
@@ -177,7 +162,6 @@
     const stopButton = document.getElementById('stop');
     const clearButton = document.getElementById('clear');
 
-    // Formatos de código de barras aceitos.
     const hints = new Map();
 
     hints.set(DecodeHintType.POSSIBLE_FORMATS, [
@@ -191,95 +175,65 @@
       BarcodeFormat.CODABAR
     ]);
 
-    // Prioriza os formatos definidos e evita tentativas desnecessárias.
     const reader = new BrowserMultiFormatReader(hints);
 
-    // Intervalo entre tentativas de decodificação.
     reader.timeBetweenDecodingAttempts = 100;
 
+    let stream = null;
     let controls = null;
+    let starting = false;
+
     let lastCode = '';
     let lastReadTime = 0;
 
-    // Iniciar câmera.
+    // INICIAR CÂMERA
     async function startCamera() {
+
+      if (starting || stream) return;
+
+      starting = true;
+      startButton.disabled = true;
+
+      status.textContent = 'Solicitando acesso à câmera...';
+      barcode.textContent = 'Aguardando leitura...';
 
       try {
 
-        startButton.disabled = true;
-        status.textContent = 'Inicializando câmera...';
+        // Solicita acesso diretamente ao navegador.
+        try {
 
-        barcode.textContent = 'Aguardando leitura...';
-
-        lastCode = '';
-
-        controls = await reader.decodeFromConstraints(
-
-          {
+          stream = await navigator.mediaDevices.getUserMedia({
             audio: false,
-
             video: {
               facingMode: { ideal: 'environment' },
-
-              width: {
-                ideal: 1920
-              },
-
-              height: {
-                ideal: 1080
-              },
-
-              frameRate: {
-                ideal: 30,
-                max: 30
-              },
-
-              focusMode: 'continuous'
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              frameRate: { ideal: 30 }
             }
+          });
 
-          },
+        } catch (error) {
 
-          video,
-
-          (result, error) => {
-
-            if (result) {
-
-              const code = result.getText();
-              const now = Date.now();
-
-              // Evita processar repetidamente o mesmo código.
-              if (
-                code === lastCode &&
-                now - lastReadTime < 2000
-              ) {
-                return;
-              }
-
-              lastCode = code;
-              lastReadTime = now;
-
-              // Exibe o resultado no centro da tela.
-              barcode.textContent = code;
-
-              status.textContent =
-                'Código detectado com sucesso!';
-
-              // Feedback sonoro.
-              if ('vibrate' in navigator) {
-                navigator.vibrate(100);
-              }
-
+          // Segunda tentativa para aparelhos incompatíveis
+          // com as configurações solicitadas.
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: 'environment'
             }
+          });
 
-          }
+        }
 
-        );
+        // Exibe a câmera.
+        video.srcObject = stream;
 
-        // Tenta aplicar foco contínuo após iniciar a câmera.
-        const track = video.srcObject?.getVideoTracks()[0];
+        await video.play();
 
-        if (track) {
+        // Tenta configurar o foco contínuo.
+        const track = stream.getVideoTracks()[0];
+
+        if (track && track.applyConstraints) {
 
           try {
 
@@ -290,29 +244,70 @@
             });
 
           } catch (error) {
-            console.log('Foco contínuo não disponível.');
+            console.log('Foco contínuo não suportado.');
           }
 
         }
 
         status.textContent = 'Procurando códigos de barras...';
 
+        // Inicia o reconhecimento usando o vídeo já aberto.
+        controls = await reader.decodeFromVideoElement(
+          video,
+          (result, error) => {
+
+            if (result) {
+
+              const code = result.getText();
+              const now = Date.now();
+
+              if (
+                code === lastCode &&
+                now - lastReadTime < 2000
+              ) {
+                return;
+              }
+
+              lastCode = code;
+              lastReadTime = now;
+
+              barcode.textContent = code;
+
+              status.textContent =
+                'Código detectado com sucesso!';
+
+              if (navigator.vibrate) {
+                navigator.vibrate(100);
+              }
+
+            }
+
+          }
+        );
+
         stopButton.disabled = false;
 
       } catch (error) {
 
-        console.error(error);
+        console.error('Erro ao iniciar câmera:', error);
 
-        status.textContent =
-          'Erro ao acessar a câmera: ' + error.message;
+        status.textContent = 'Erro: ' + error.message;
 
+        barcode.textContent = 'Falha ao iniciar';
+
+        // Libera qualquer recurso que tenha sido aberto.
+        stopCamera();
+
+      } finally {
+
+        starting = false;
         startButton.disabled = false;
 
       }
 
     }
 
-    // Parar câmera.
+    // PARAR CÂMERA
     function stopCamera() {
 
       if (controls) {
@@ -320,14 +315,16 @@
         controls = null;
       }
 
-      if (video.srcObject) {
+      if (stream) {
 
-        video.srcObject.getTracks().forEach(track => {
+        stream.getTracks().forEach(track => {
           track.stop();
         });
 
-        video.srcObject = null;
+        stream = null;
       }
+
+      video.srcObject = null;
 
       startButton.disabled = false;
       stopButton.disabled = true;
@@ -336,26 +333,24 @@
 
     }
 
-    // Limpar resultado.
+    // LIMPAR RESULTADO
     function clearResult() {
 
       barcode.textContent = 'Aguardando leitura...';
+
       lastCode = '';
       lastReadTime = 0;
 
-      status.textContent = controls
+      status.textContent = stream
         ? 'Procurando códigos de barras...'
         : 'Câmera desligada';
 
     }
 
     startButton.addEventListener('click', startCamera);
-
     stopButton.addEventListener('click', stopCamera);
-
     clearButton.addEventListener('click', clearResult);
 
-    // Encerra a câmera ao sair da página.
     window.addEventListener('pagehide', stopCamera);
 
   </script>
