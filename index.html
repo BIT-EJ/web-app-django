@@ -31,6 +31,14 @@
         button:hover {
             background-color: #218838;
         }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        #resultado {
+            margin-top: 15px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -41,8 +49,35 @@
 
     <main>
         <p>teste</p>
-        <button onclick="alert('Olá! Você clicou no botão.')">Clique aqui</button>
+        <button id="btnProcessar" onclick="chamarBackend()">Clique aqui</button>
+        <p id="resultado"></p>
     </main>
+
+    <script>
+        async function chamarBackend() {
+            const botao = document.getElementById('btnProcessar');
+            const resultado = document.getElementById('resultado');
+
+            botao.disabled = true;
+            resultado.innerText = 'Processando...';
+
+            try {
+                const response = await fetch('/api/processar');
+                
+                if (!response.ok) {
+                    throw new Error(`Erro HTTP: ${response.status}`);
+                }
+
+                const dados = await response.json();
+                resultado.innerText = dados.mensagem;
+            } catch (erro) {
+                console.error('Erro na requisição:', erro);
+                resultado.innerText = 'Erro ao conectar com o backend Python.';
+            } finally {
+                botao.disabled = false;
+            }
+        }
+    </script>
 
 </body>
 </html>
